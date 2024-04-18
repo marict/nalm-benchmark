@@ -1,6 +1,6 @@
 # Neural Arithmetic Logic Modules: Arithmetic Benchmarking Tasks
-This repository is the official implementation for experiments in [A Primer for Neural Arithmetic Logic Modules](TODO),
-providing the required files to generate Figures 14-19 corresponding to the Single Module Arithmetic Task.
+This repository is the official implementation for experiments in [A Primer for Neural Arithmetic Logic Modules](https://www.jmlr.org/papers/volume23/21-0211/21-0211.pdf),
+providing the required files to generate Figures 14-19 corresponding to the Single Module Arithmetic Task. 
 
 This repo builds ontop of the codebase from **[Neural Arithmetic Units](https://openreview.net/forum?id=H1gNOeHKPS) 
 by Andreas Madsen and Alexander Rosenberg Johansen**. 
