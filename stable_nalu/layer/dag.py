@@ -52,7 +52,7 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_log: bool = False,
         use_ste: bool = False,
         use_layer_norm: bool = True,
-        use_attention: bool = False,
+        use_attention: bool = True,
         attn_dim: int = 64,
         attn_layers: int = 1,
         dropout_p: float = 0.1,
