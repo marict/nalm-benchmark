@@ -1,0 +1,9 @@
+numpy
+scipy
+pandas
+tqdm
+tensorboard
+tensorboardX
+wandb
+matplotlib
+
