@@ -35,3 +35,5 @@ from .npu_real import RealNPULayer
 from .inalu import INALULayer
 from .mcfc import MulMCFC, MCFullyConnected, MulMCFCSignINALU, MulMCFCSignRealNPU
 
+from .dag import DAGLayer
+

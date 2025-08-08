@@ -551,6 +551,7 @@ if args.cuda:
     model.cuda()
 criterion = torch.nn.MSELoss()
 
+# Build optimizer
 if args.optimizer == 'adam':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 elif args.optimizer == 'sgd':
@@ -617,6 +618,15 @@ for epoch_i, (x_train, t_train) in zip(range(resume_epoch, args.max_iterations +
 
         summary_writer.add_scalar('metric/valid/interpolation', interpolation_error)
         summary_writer.add_scalar('metric/test/extrapolation', extrapolation_error)
+
+        # Optional: flip DAG layers to STE once interpolation < 1.0 to harden structure
+        if float(interpolation_error) < 0.1:
+            flipped_any = False
+            for module in model.modules():
+                if "use_ste" in module.__dict__:
+                    if module.use_ste is False:
+                        module.use_ste = True
+                        print(f"Flipped {module.__class__.__name__} to use_ste")
 
     # forward
     y_train = model(x_train)
