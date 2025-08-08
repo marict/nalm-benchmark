@@ -2,6 +2,7 @@ numpy
 scipy
 pandas
 tqdm
+tensorflow
 tensorboard
 tensorboardX
 wandb
