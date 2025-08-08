@@ -6,4 +6,3 @@ tensorboard
 tensorboardX
 wandb
 matplotlib
-misc
