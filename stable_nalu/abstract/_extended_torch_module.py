@@ -1,7 +1,9 @@
+import collections
 
 import torch
-import collections
+
 from ..writer import DummySummaryWriter
+
 
 class NoRandomScope:
     def __init__(self, module):
@@ -14,8 +16,17 @@ class NoRandomScope:
         self._module._enable_random()
         return False
 
+
 class ExtendedTorchModule(torch.nn.Module):
-    def __init__(self, default_name, *args, writer=None, name=None, use_robustness_exp_logging=False, **kwargs):
+    def __init__(
+        self,
+        default_name,
+        *args,
+        writer=None,
+        name=None,
+        use_robustness_exp_logging=False,
+        **kwargs,
+    ):
         super().__init__()
         if writer is None:
             writer = DummySummaryWriter()
@@ -38,7 +49,7 @@ class ExtendedTorchModule(torch.nn.Module):
 
         if merge_in is not None:
             for key, value in merge_in.items():
-                self.writer.add_scalar(f'regualizer/{key}', value)
+                self.writer.add_scalar(f"regualizer/{key}", value)
                 regualizers[key] += value
 
         for module in self.children():
@@ -57,8 +68,8 @@ class ExtendedTorchModule(torch.nn.Module):
         for name, parameter in self.named_parameters(recurse=False):
             if parameter.requires_grad:
                 gradient, *_ = parameter.grad.data
-                self.writer.add_summary(f'{name}/grad', gradient)
-                self.writer.add_histogram(f'{name}/grad', gradient)
+                self.writer.add_summary(f"{name}/grad", gradient)
+                self.writer.add_histogram(f"{name}/grad", gradient)
 
         for module in self.children():
             if isinstance(module, ExtendedTorchModule):
@@ -68,7 +79,7 @@ class ExtendedTorchModule(torch.nn.Module):
         for name, parameter in self.named_parameters(recurse=False):
             if parameter.requires_grad:
                 gradient = parameter.grad.data
-                self.writer.add_grad_summary(f'{name}/grad', gradient)
+                self.writer.add_grad_summary(f"{name}/grad", gradient)
 
         for module in self.children():
             if isinstance(module, ExtendedTorchModule):
@@ -80,7 +91,9 @@ class ExtendedTorchModule(torch.nn.Module):
         for name, parameter in self.named_parameters(recurse=False):
             if parameter.requires_grad:
                 for i, elem in enumerate(parameter.view(-1)):
-                    self.writer.add_scalar(f'param/{name}/{i}', elem, verbose_only=False)
+                    self.writer.add_scalar(
+                        f"param/{name}/{i}", elem, verbose_only=False
+                    )
 
         for module in self.children():
             if isinstance(module, ExtendedTorchModule):
@@ -92,8 +105,10 @@ class ExtendedTorchModule(torch.nn.Module):
             if parameter.requires_grad:
                 gradient, *_ = parameter.grad.data
                 # take mean because working with batches. Therefore this normalisation is a approximation
-                gradient = gradient / residual.mean(0)   # normalise by removing effect of error residual (y-y_hat)
-                self.writer.add_mse_grad_summary(f'{name}/grad', gradient)
+                gradient = gradient / residual.mean(
+                    0
+                )  # normalise by removing effect of error residual (y-y_hat)
+                self.writer.add_mse_grad_summary(f"{name}/grad", gradient)
 
         for module in self.children():
             if isinstance(module, ExtendedTorchModule):

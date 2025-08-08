@@ -1,7 +1,6 @@
-
-from .simple_function_static import SimpleFunctionStaticDataset
-from .simple_function_recurrent import SimpleFunctionRecurrentDataset
+from .number_translation import NumberTranslationDataset
 from .sequential_mnist import SequentialMnistDataset
 from .sequential_svhn import SequentialSvhnDataset
-from .number_translation import NumberTranslationDataset
+from .simple_function_recurrent import SimpleFunctionRecurrentDataset
+from .simple_function_static import SimpleFunctionStaticDataset
 from .single_layer import SingleLayerStaticDataset

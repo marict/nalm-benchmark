@@ -1,17 +1,18 @@
-
 import os
-import shutil
 import os.path as path
-import torch
+import shutil
+
 import numpy as np
+import torch
 from tensorboardX import SummaryWriter as SummaryWriterRaw
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
-if 'TENSORBOARD_DIR' in os.environ:
-    TENSORBOARD_DIR = os.environ['TENSORBOARD_DIR']
+if "TENSORBOARD_DIR" in os.environ:
+    TENSORBOARD_DIR = os.environ["TENSORBOARD_DIR"]
 else:
-    TENSORBOARD_DIR = path.join(THIS_DIR, '../../tensorboard')
+    TENSORBOARD_DIR = path.join(THIS_DIR, "../../tensorboard")
+
 
 class SummaryWriterNamespaceNoLoggingScope:
     def __init__(self, writer):
@@ -23,6 +24,7 @@ class SummaryWriterNamespaceNoLoggingScope:
     def __exit__(self, type, value, traceback):
         self._writer._logging_enabled = True
         return False
+
 
 class SummaryWriterNamespaceForceLoggingScope:
     def __init__(self, writer, flag):
@@ -36,8 +38,11 @@ class SummaryWriterNamespaceForceLoggingScope:
         self._writer._force_logging = False
         return False
 
+
 class SummaryWriterNamespace:
-    def __init__(self, namespace='', epoch_interval=1, verbose=True, root=None, parent=None):
+    def __init__(
+        self, namespace="", epoch_interval=1, verbose=True, root=None, parent=None
+    ):
         self._namespace = namespace
         self._epoch_interval = epoch_interval
         self._verbose = verbose
@@ -54,7 +59,9 @@ class SummaryWriterNamespace:
         return self._root.get_iteration()
 
     def is_log_iteration(self):
-        return (self._root.get_iteration() % self._epoch_interval == 0) or self._root._force_logging
+        return (
+            self._root.get_iteration() % self._epoch_interval == 0
+        ) or self._root._force_logging
 
     def is_logging_enabled(self):
         writer = self
@@ -66,51 +73,91 @@ class SummaryWriterNamespace:
         return True
 
     def is_verbose(self, verbose_only):
-        return (verbose_only is False or self._verbose)
+        return verbose_only is False or self._verbose
 
     def add_scalar(self, name, value, verbose_only=True):
-        if self.is_log_iteration() and self.is_logging_enabled() and self.is_verbose(verbose_only):
-            self._root.writer.add_scalar(f'{self._namespace}/{name}', value, self.get_iteration())
+        if (
+            self.is_log_iteration()
+            and self.is_logging_enabled()
+            and self.is_verbose(verbose_only)
+        ):
+            self._root.writer.add_scalar(
+                f"{self._namespace}/{name}", value, self.get_iteration()
+            )
 
     def add_summary(self, name, tensor, verbose_only=True):
-        if self.is_log_iteration() and self.is_logging_enabled() and self.is_verbose(verbose_only):
-            self._root.writer.add_scalar(f'{self._namespace}/{name}/mean', torch.mean(tensor), self.get_iteration())
-            self._root.writer.add_scalar(f'{self._namespace}/{name}/var', torch.var(tensor), self.get_iteration())
+        if (
+            self.is_log_iteration()
+            and self.is_logging_enabled()
+            and self.is_verbose(verbose_only)
+        ):
+            self._root.writer.add_scalar(
+                f"{self._namespace}/{name}/mean",
+                torch.mean(tensor),
+                self.get_iteration(),
+            )
+            self._root.writer.add_scalar(
+                f"{self._namespace}/{name}/var", torch.var(tensor), self.get_iteration()
+            )
             # L2 grad norm of a model parameter
-            self._root.writer.add_scalar(f'{self._namespace}/{name}/norm', tensor.norm(p=2), self.get_iteration())
+            self._root.writer.add_scalar(
+                f"{self._namespace}/{name}/norm", tensor.norm(p=2), self.get_iteration()
+            )
 
     def add_mse_grad_summary(self, name, tensor):
         # log l1 grad of tensor -> so 1 value for 1 unit's weight matrix
-        self._root.writer.add_scalar(f'{self._namespace}/{name}/mse-norm', tensor.norm(p=1), self.get_iteration())
+        self._root.writer.add_scalar(
+            f"{self._namespace}/{name}/mse-norm", tensor.norm(p=1), self.get_iteration()
+        )
 
     def add_grad_summary(self, name, tensor):
         # plot each tensor element separately - i.e. plot the partial derivatives of the W
         for i, elem in enumerate(tensor.view(-1)):
-            self._root.writer.add_scalar(f'{self._namespace}/{name}/W_{i}', elem, self.get_iteration())
+            self._root.writer.add_scalar(
+                f"{self._namespace}/{name}/W_{i}", elem, self.get_iteration()
+            )
 
     def add_tensor(self, name, matrix, verbose_only=True):
-        if self.is_log_iteration() and self.is_logging_enabled() and self.is_verbose(verbose_only):
+        if (
+            self.is_log_iteration()
+            and self.is_logging_enabled()
+            and self.is_verbose(verbose_only)
+        ):
             data = matrix.detach().cpu().numpy()
             data_str = np.array2string(data, max_line_width=60, threshold=np.inf)
-            self._root.writer.add_text(f'{self._namespace}/{name}', f'<pre>{data_str}</pre>', self.get_iteration())
+            self._root.writer.add_text(
+                f"{self._namespace}/{name}",
+                f"<pre>{data_str}</pre>",
+                self.get_iteration(),
+            )
 
     def add_histogram(self, name, tensor, verbose_only=True):
         if torch.isnan(tensor).any():
-            print(f'nan detected in {self._namespace}/{name}')
+            print(f"nan detected in {self._namespace}/{name}")
             # tensor = torch.where(torch.isnan(tensor), torch.tensor(0, dtype=tensor.dtype), tensor)
-            raise ValueError('nan detected')
+            raise ValueError("nan detected")
 
-        if self.is_log_iteration() and self.is_logging_enabled() and self.is_verbose(verbose_only):
-            self._root.writer.add_histogram(f'{self._namespace}/{name}', tensor, self.get_iteration())
+        if (
+            self.is_log_iteration()
+            and self.is_logging_enabled()
+            and self.is_verbose(verbose_only)
+        ):
+            self._root.writer.add_histogram(
+                f"{self._namespace}/{name}", tensor, self.get_iteration()
+            )
 
     def print(self, name, tensor, verbose_only=True):
-        if self.is_log_iteration() and self.is_logging_enabled() and self.is_verbose(verbose_only):
-            print(f'{self._namespace}/{name}:')
+        if (
+            self.is_log_iteration()
+            and self.is_logging_enabled()
+            and self.is_verbose(verbose_only)
+        ):
+            print(f"{self._namespace}/{name}:")
             print(tensor)
 
     def namespace(self, name):
         return SummaryWriterNamespace(
-            namespace=f'{self._namespace}/{name}',
+            namespace=f"{self._namespace}/{name}",
             epoch_interval=self._epoch_interval,
             verbose=self._verbose,
             root=self._root,
@@ -141,6 +188,7 @@ class SummaryWriterNamespace:
     def force_logging(self, flag):
         return SummaryWriterNamespaceForceLoggingScope(self, flag)
 
+
 class SummaryWriter(SummaryWriterNamespace):
     def __init__(self, name, remove_existing_data=False, **kwargs):
         super().__init__()
@@ -165,10 +213,11 @@ class SummaryWriter(SummaryWriterNamespace):
     def __del__(self):
         self.close()
 
-class DummySummaryWriter():
+
+class DummySummaryWriter:
     def __init__(self, **kwargs):
         self._logging_enabled = False
-        self.name = 'DummyWriter'
+        self.name = "DummyWriter"
         self._iteration = 0
         pass
 
@@ -178,7 +227,7 @@ class DummySummaryWriter():
     def add_summary(self, name, tensor, verbose_only=True):
         pass
 
-    def add_grad_summary(self,  name, tensor, verbose_only=True):
+    def add_grad_summary(self, name, tensor, verbose_only=True):
         pass
 
     def add_mse_grad_summary(self, name, tensor):
@@ -210,5 +259,6 @@ class DummySummaryWriter():
 
     def get_iteration(self):
         return self._iteration
+
     def force_logging(self, flag):
         return SummaryWriterNamespaceForceLoggingScope(self, flag)

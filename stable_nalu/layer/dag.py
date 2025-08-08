@@ -47,15 +47,17 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_log: bool = False,
         use_ste: bool = False,
         use_layer_norm: bool = True,
-        use_mlp: bool = False,
+        use_attention: bool = False,
+        attn_dim: int = 64,
+        attn_layers: int = 1,
         dropout_p: float = 0.1,
         **kwargs,
     ) -> None:
-        super().__init__('dag', writer=writer, name=name, **kwargs)
+        super().__init__("dag", writer=writer, name=name, **kwargs)
 
         if out_features != 1:
             raise ValueError(
-                f'DAGLayer currently supports out_features == 1, got {out_features}'
+                f"DAGLayer currently supports out_features == 1, got {out_features}"
             )
 
         self.in_features = in_features
@@ -63,21 +65,53 @@ class DAGLayer(ExtendedTorchModule):
 
         # Execution graph sizing: initial nodes come from input features
         # Total nodes = initial nodes + dag_depth (each step produces one new node)
-        self.dag_depth = int(dag_depth) if dag_depth is not None else max(1, in_features - 1)
+        self.dag_depth = (
+            int(dag_depth) if dag_depth is not None else max(1, in_features - 1)
+        )
         self.num_initial_nodes = in_features
         self.total_nodes = self.num_initial_nodes + self.dag_depth
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
         self.use_ste = bool(use_ste)
-        self.use_mlp = bool(use_mlp)
+        self.use_attention = bool(use_attention)
 
-        # Normalize inputs and optionally enhance with a small MLP + dropout
+        # Normalize inputs and optionally enhance with a small MLP or attention + dropout
         self.input_norm = nn.LayerNorm(in_features) if use_layer_norm else None
-        self.pre_ffn1 = nn.Linear(in_features, in_features)
-        self.pre_ffn2 = nn.Linear(in_features, in_features)
         self.act = nn.GELU()
         self.dropout = nn.Dropout(dropout_p)
+
+        # Optional self-attention pre-head over tokens with positional embeddings
+        if self.use_attention:
+            self.attn_dim = int(attn_dim)
+            self.attn_layers = int(attn_layers)
+            # Learned positional embeddings for positions [0..in_features-1]
+            self.pos_embed = nn.Parameter(torch.zeros(in_features, self.attn_dim))
+            # Project scalar token -> model dim and back
+            self.token_in = nn.Linear(1, self.attn_dim)
+            self.token_out = nn.Linear(self.attn_dim, 1)
+            # Single-head self-attention blocks
+            self.attn_blocks = nn.ModuleList(
+                [
+                    nn.ModuleDict(
+                        {
+                            "mha": nn.MultiheadAttention(
+                                embed_dim=self.attn_dim,
+                                num_heads=1,
+                                dropout=dropout_p,
+                                batch_first=True,
+                            ),
+                            "ln1": nn.LayerNorm(self.attn_dim),
+                            "ff1": nn.Linear(self.attn_dim, self.attn_dim),
+                            "ff2": nn.Linear(self.attn_dim, self.attn_dim),
+                            "ln2": nn.LayerNorm(self.attn_dim),
+                            "act": nn.GELU(),
+                            "drop": nn.Dropout(dropout_p),
+                        }
+                    )
+                    for _ in range(self.attn_layers)
+                ]
+            )
 
         # Small prediction heads mapping input -> structure
         # Operand selector matrix O: shape (dag_depth, total_nodes)
@@ -109,7 +143,11 @@ class DAGLayer(ExtendedTorchModule):
         return values.round().detach() + (values - values.detach())
 
     def _compute_domain_mixed_result(
-        self, working_mag: torch.Tensor, working_sign: torch.Tensor, O_step: torch.Tensor, G_step: torch.Tensor
+        self,
+        working_mag: torch.Tensor,
+        working_sign: torch.Tensor,
+        O_step: torch.Tensor,
+        G_step: torch.Tensor,
     ) -> torch.Tensor:
         # Mixed-domain aggregation: linear domain uses signed values; log domain uses log magnitudes
         signed_values = working_sign * working_mag
@@ -118,7 +156,11 @@ class DAGLayer(ExtendedTorchModule):
         return torch.sum(O_step * mixed, dim=-1, keepdim=True)
 
     def _compute_new_sign(
-        self, R_mag: torch.Tensor, working_sign: torch.Tensor, O_step: torch.Tensor, G_step: torch.Tensor
+        self,
+        R_mag: torch.Tensor,
+        working_sign: torch.Tensor,
+        O_step: torch.Tensor,
+        G_step: torch.Tensor,
     ) -> torch.Tensor:
         # Linear domain sign from result magnitude; log domain sign from product of operand signs
         linear_sign = torch.tanh(R_mag / 1e-4)
@@ -126,7 +168,9 @@ class DAGLayer(ExtendedTorchModule):
         log_sign = torch.tanh(torch.prod(sign_weights, dim=-1, keepdim=True) / 1e-4)
         return G_step * linear_sign + (1.0 - G_step) * log_sign
 
-    def _compute_new_magnitude(self, R_mag: torch.Tensor, G_step: torch.Tensor) -> torch.Tensor:
+    def _compute_new_magnitude(
+        self, R_mag: torch.Tensor, G_step: torch.Tensor
+    ) -> torch.Tensor:
         # Blend between linear magnitude and exp(log-magnitude)
         linear_mag = torch.clamp(torch.abs(R_mag), max=self._mag_max)
         R_mag_clamped = torch.clamp(R_mag, min=-self._log_lim, max=self._log_lim)
@@ -137,26 +181,46 @@ class DAGLayer(ExtendedTorchModule):
         # input: (B, in_features)
         if input.dim() != 2 or input.size(1) != self.in_features:
             raise ValueError(
-                f'Expected input of shape (B, {self.in_features}), got {tuple(input.shape)}'
+                f"Expected input of shape (B, {self.in_features}), got {tuple(input.shape)}"
             )
 
         device = input.device
-        dtype = torch.float64 if device.type != 'mps' else torch.float32
+        dtype = torch.float64 if device.type != "mps" else torch.float32
         B = input.size(0)
 
         # Initial node magnitudes and signs come directly from input features
-        init_mag = torch.clamp(input.abs(), min=self._mag_min, max=self._mag_max).to(dtype)
-        init_sign = torch.where(input >= 0, torch.tensor(1.0, device=device), torch.tensor(-1.0, device=device)).to(
+        init_mag = torch.clamp(input.abs(), min=self._mag_min, max=self._mag_max).to(
             dtype
         )
+        init_sign = torch.where(
+            input >= 0,
+            torch.tensor(1.0, device=device),
+            torch.tensor(-1.0, device=device),
+        ).to(dtype)
 
-        # # Predict structure from input
-        head_input = self.input_norm(input) if self.input_norm is not None else input  # (B, in_features)
-        if self.use_mlp:
-            hidden = self.pre_ffn1(head_input)
-            hidden = self.act(hidden)
-            hidden = self.dropout(hidden)
-            head_input = self.pre_ffn2(hidden)
+        # Predict structure from input
+        head_input = (
+            self.input_norm(input) if self.input_norm is not None else input
+        )  # (B, in_features)
+        if self.use_attention:
+            # Build token sequence (B, N, D)
+            tokens = input.unsqueeze(-1)  # (B, N, 1)
+            tokens = self.token_in(tokens)  # (B, N, D)
+            tokens = tokens + self.pos_embed.unsqueeze(
+                0
+            )  # add learned positional encodings
+            for blk in self.attn_blocks:
+                # Self-attention + residual + norm
+                resid = tokens
+                attn_out, _ = blk["mha"](tokens, tokens, tokens, need_weights=False)
+                tokens = blk["ln1"](resid + blk["drop"](attn_out))
+                # Feed-forward + residual + norm
+                resid = tokens
+                f = blk["act"](blk["ff1"](tokens))
+                f = blk["drop"](blk["ff2"](f))
+                tokens = blk["ln2"](resid + f)
+            head_input = self.token_out(tokens).squeeze(-1)  # (B, N)
+
         O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
         O = O_flat.view(B, self.dag_depth, self.total_nodes).to(dtype)
         G = torch.sigmoid(self.G_head(head_input)).to(dtype)  # (B, dag_depth)
@@ -201,7 +265,9 @@ class DAGLayer(ExtendedTorchModule):
             causal[:, :valid_nodes] = 1.0
             O_step = O_step * causal
 
-            R_mag = self._compute_domain_mixed_result(working_mag, working_sign, O_step, G_step)
+            R_mag = self._compute_domain_mixed_result(
+                working_mag, working_sign, O_step, G_step
+            )
             V_sign_new = self._compute_new_sign(R_mag, working_sign, O_step, G_step)
             V_mag_new = self._compute_new_magnitude(R_mag, G_step)
 
@@ -225,5 +291,3 @@ class DAGLayer(ExtendedTorchModule):
 
         # Return with expected dtype
         return final_value.to(input.dtype).unsqueeze(-1)  # (B, 1)
-
-

@@ -1,4 +1,3 @@
-
 class DataLoaderCudaWrapper:
     def __init__(self, batcher):
         self._batcher = batcher
@@ -13,6 +12,7 @@ class DataLoaderCudaWrapper:
     def __len__(self):
         return len(self._batcher)
 
+
 class FastDataLoader:
     def __init__(self, dataset, batch_size, use_cuda):
         self.dataset = dataset
@@ -21,7 +21,9 @@ class FastDataLoader:
 
     def __iter__(self):
         for i in range(len(self)):
-            values = self.dataset[i * self.batch_size: min(len(self.dataset), (1 + i)*self.batch_size)]
+            values = self.dataset[
+                i * self.batch_size : min(len(self.dataset), (1 + i) * self.batch_size)
+            ]
             if self.use_cuda:
                 yield tuple(value.cuda() for value in values)
             else:

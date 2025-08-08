@@ -1,39 +1,31 @@
-
-from .basic import BasicLayer, BasicCell
-
-from .nac import NACLayer, NACCell
-from .nalu import NALULayer, NALUCell
-
-from .gumbel_nac import GumbelNACLayer, GumbelNACCell
-from .gumbel_nalu import GumbelNALULayer, GumbelNALUCell
-
-from .linear_nac import LinearNACLayer, LinearNACCell
-from .linear_nalu import LinearNALULayer, LinearNALUCell
-
-from .softmax_nac import SoftmaxNACLayer, SoftmaxNACCell
-from .softmax_nalu import SoftmaxNALULayer, SoftmaxNALUCell
-
-from .independent_nac import IndependentNACLayer, IndependentNACCell
-from .independent_nalu import IndependentNALULayer, IndependentNALUCell
-
-from .hard_softmax_nac import HardSoftmaxNACLayer, HardSoftmaxNACCell
-from .hard_softmax_nalu import HardSoftmaxNALULayer, HardSoftmaxNALUCell
-
-from .gradient_bandit_nac import GradientBanditNACLayer, GradientBanditNACCell
-from .gradient_bandit_nalu import GradientBanditNALULayer, GradientBanditNALUCell
-
-from .regualized_linear_nac import RegualizedLinearNACLayer, RegualizedLinearNACCell
-from .regualized_linear_nalu import RegualizedLinearNALULayer, RegualizedLinearNALUCell
-
-from .re_regualized_linear_nac import ReRegualizedLinearNACLayer, ReRegualizedLinearNACCell
-from .re_regualized_linear_nalu import ReRegualizedLinearNALULayer, ReRegualizedLinearNALUCell
-
-from .generalized import GeneralizedLayer, GeneralizedCell
-
+from .basic import BasicCell, BasicLayer
+from .dag import DAGLayer
+from .generalized import GeneralizedCell, GeneralizedLayer
+from .gradient_bandit_nac import GradientBanditNACCell, GradientBanditNACLayer
+from .gradient_bandit_nalu import (GradientBanditNALUCell,
+                                   GradientBanditNALULayer)
+from .gumbel_nac import GumbelNACCell, GumbelNACLayer
+from .gumbel_nalu import GumbelNALUCell, GumbelNALULayer
+from .hard_softmax_nac import HardSoftmaxNACCell, HardSoftmaxNACLayer
+from .hard_softmax_nalu import HardSoftmaxNALUCell, HardSoftmaxNALULayer
+from .inalu import INALULayer
+from .independent_nac import IndependentNACCell, IndependentNACLayer
+from .independent_nalu import IndependentNALUCell, IndependentNALULayer
+from .linear_nac import LinearNACCell, LinearNACLayer
+from .linear_nalu import LinearNALUCell, LinearNALULayer
+from .mcfc import (MCFullyConnected, MulMCFC, MulMCFCSignINALU,
+                   MulMCFCSignRealNPU)
+from .nac import NACCell, NACLayer
+from .nalu import NALUCell, NALULayer
 from .npu import NPULayer
 from .npu_real import RealNPULayer
-from .inalu import INALULayer
-from .mcfc import MulMCFC, MCFullyConnected, MulMCFCSignINALU, MulMCFCSignRealNPU
-
-from .dag import DAGLayer
-
+from .re_regualized_linear_nac import (ReRegualizedLinearNACCell,
+                                       ReRegualizedLinearNACLayer)
+from .re_regualized_linear_nalu import (ReRegualizedLinearNALUCell,
+                                        ReRegualizedLinearNALULayer)
+from .regualized_linear_nac import (RegualizedLinearNACCell,
+                                    RegualizedLinearNACLayer)
+from .regualized_linear_nalu import (RegualizedLinearNALUCell,
+                                     RegualizedLinearNALULayer)
+from .softmax_nac import SoftmaxNACCell, SoftmaxNACLayer
+from .softmax_nalu import SoftmaxNALUCell, SoftmaxNALULayer

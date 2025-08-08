@@ -1,9 +1,10 @@
 import itertools
 import math
+import os
+
 import numpy as np
 import torch
 import torch.utils.data
-import os
 
 from ._dataloader import FastDataLoader
 
@@ -13,24 +14,24 @@ class ARITHMETIC_FUNCTIONS_STRINGIY:
 
     @staticmethod
     def add(*subsets):
-        return ' + '.join(map(str, subsets))
+        return " + ".join(map(str, subsets))
 
     @staticmethod
     def sub(a, b, *extra):
-        return f'{a} - {b}'
+        return f"{a} - {b}"
 
     @staticmethod
     def mul(*subsets):
-        return ' * '.join(map(str, subsets))
+        return " * ".join(map(str, subsets))
 
     def div(a, b):
-        return f'{a} / {b}'
+        return f"{a} / {b}"
 
     def squared(a, *extra):
-        return f'{a}**2'
+        return f"{a}**2"
 
     def root(a, *extra):
-        return f'sqrt({a})'
+        return f"sqrt({a})"
 
 
 class ARITHMETIC_FUNCTIONS:
@@ -57,14 +58,18 @@ class ARITHMETIC_FUNCTIONS:
 
 
 class SingleLayerDataset:
-    def __init__(self, operation, input_size,
-                 subset_ratio=1,
-                 overlap_ratio=0,
-                 num_subsets=1,
-                 simple=False,
-                 seed=None,
-                 use_cuda=False,
-                 max_size=2 ** 32 - 1):
+    def __init__(
+        self,
+        operation,
+        input_size,
+        subset_ratio=1,
+        overlap_ratio=0,
+        num_subsets=1,
+        simple=False,
+        seed=None,
+        use_cuda=False,
+        max_size=2**32 - 1,
+    ):
         super().__init__()
         self._operation_name = operation
         self._operation = getattr(ARITHMETIC_FUNCTIONS, operation)
@@ -90,19 +95,19 @@ class SingleLayerDataset:
 
             total_used_size = self.subset_ranges[-1][1]
             if total_used_size > input_size:
-                raise ValueError('too many subsets given the subset and overlap ratios')
+                raise ValueError("too many subsets given the subset and overlap ratios")
 
             offset = self._rng.randint(0, input_size - total_used_size + 1)
             self.subset_ranges = [
-                (start + offset, end + offset)
-                for start, end in self.subset_ranges
+                (start + offset, end + offset) for start, end in self.subset_ranges
             ]
 
     def print_operation(self):
         subset_str = [
-            f'{self._operation_name}(v[{start}:{end}))' for start, end in self.subset_ranges
+            f"{self._operation_name}(v[{start}:{end}))"
+            for start, end in self.subset_ranges
         ]
-        return ', '.join(subset_str)  # returning multiple output values
+        return ", ".join(subset_str)  # returning multiple output values
 
     def get_input_size(self):
         return self._input_size
@@ -114,10 +119,16 @@ class SingleLayerDataset:
     def fork(self, shape, sample_range, seed=None):
         assert shape[-1] == self._input_size
         # Added: Windows machine requires dtype to be specified as unit64
-        if os.name == 'nt':
-            rng = np.random.RandomState(self._rng.randint(0, 2 ** 32 - 1, dtype='uint64') if seed is None else seed)
+        if os.name == "nt":
+            rng = np.random.RandomState(
+                self._rng.randint(0, 2**32 - 1, dtype="uint64")
+                if seed is None
+                else seed
+            )
         else:
-            rng = np.random.RandomState(self._rng.randint(0, 2 ** 32 - 1) if seed is None else seed)
+            rng = np.random.RandomState(
+                self._rng.randint(0, 2**32 - 1) if seed is None else seed
+            )
 
         return SingleLayerDatasetFork(self, shape, sample_range, rng)
 
@@ -129,8 +140,10 @@ class SingleLayerDatasetFork(torch.utils.data.Dataset):
         if not isinstance(sample_range[0], list):
             sample_range = [sample_range]
         else:
-            if (sample_range[0][0] - sample_range[0][1]) != (sample_range[1][0] - sample_range[1][1]):
-                raise ValueError(f'unsymetric range for {sample_range}')
+            if (sample_range[0][0] - sample_range[0][1]) != (
+                sample_range[1][0] - sample_range[1][1]
+            ):
+                raise ValueError(f"unsymetric range for {sample_range}")
 
         self._shape = shape
         self._sample_range = sample_range
@@ -148,21 +161,22 @@ class SingleLayerDatasetFork(torch.utils.data.Dataset):
             return self._rng.uniform(
                 low=self._sample_range[0][0],
                 high=self._sample_range[0][1],
-                size=(batch_size,) + self._shape)
+                size=(batch_size,) + self._shape,
+            )
         elif len(self._sample_range) == 2:
             part_0 = self._rng.uniform(
                 low=self._sample_range[0][0],
                 high=self._sample_range[0][1],
-                size=(batch_size,) + self._shape)
+                size=(batch_size,) + self._shape,
+            )
 
             part_1 = self._rng.uniform(
                 low=self._sample_range[1][0],
                 high=self._sample_range[1][1],
-                size=(batch_size,) + self._shape)
+                size=(batch_size,) + self._shape,
+            )
 
-            choose = self._rng.randint(
-                2,
-                size=(batch_size,) + self._shape)
+            choose = self._rng.randint(2, size=(batch_size,) + self._shape)
 
             return np.where(choose, part_0, part_1)
         else:
@@ -192,7 +206,7 @@ class SingleLayerDatasetFork(torch.utils.data.Dataset):
 
         return (
             torch.tensor(input_vector, dtype=torch.get_default_dtype()),
-            torch.tensor(output_vector, dtype=torch.get_default_dtype())
+            torch.tensor(output_vector, dtype=torch.get_default_dtype()),
         )
 
     def __len__(self):

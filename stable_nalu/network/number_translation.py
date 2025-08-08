@@ -1,34 +1,41 @@
-
 import torch
+
 from ..abstract import ExtendedTorchModule
-from ..layer import GeneralizedLayer, GeneralizedCell
+from ..layer import GeneralizedCell, GeneralizedLayer
+
 
 class NumberTranslationNetwork(ExtendedTorchModule):
     UNIT_NAMES = GeneralizedCell.UNIT_NAMES
 
-    def __init__(self, unit_name,
-                 embedding_size=2,  # 1 for the number, 1 for the gate ?
-                 hidden_size=2,  # 1 for the number, 1 for the gate ?
-                 dictionary_size=30,
-                 writer=None,
-                 **kwags):
-        super().__init__('network', writer=writer, **kwags)
+    def __init__(
+        self,
+        unit_name,
+        embedding_size=2,  # 1 for the number, 1 for the gate ?
+        hidden_size=2,  # 1 for the number, 1 for the gate ?
+        dictionary_size=30,
+        writer=None,
+        **kwags
+    ):
+        super().__init__("network", writer=writer, **kwags)
         self.unit_name = unit_name
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.dictionary_size = dictionary_size
 
-        self.register_buffer('lstm_zero_state_h', torch.Tensor(hidden_size))
-        self.register_buffer('lstm_zero_state_c', torch.Tensor(hidden_size))
-        self.register_buffer('output_zero_state', torch.Tensor(1))
+        self.register_buffer("lstm_zero_state_h", torch.Tensor(hidden_size))
+        self.register_buffer("lstm_zero_state_c", torch.Tensor(hidden_size))
+        self.register_buffer("output_zero_state", torch.Tensor(1))
 
         self.embedding = torch.nn.Embedding(dictionary_size, embedding_size)
         self.lstm_cell = torch.nn.LSTMCell(embedding_size, hidden_size)
-        self.output_cell = GeneralizedCell(hidden_size, 1,
-                                        unit_name,
-                                        writer=self.writer,
-                                        name='recurrent_output',
-                                        **kwags)
+        self.output_cell = GeneralizedCell(
+            hidden_size,
+            1,
+            unit_name,
+            writer=self.writer,
+            name="recurrent_output",
+            **kwags
+        )
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -68,6 +75,6 @@ class NumberTranslationNetwork(ExtendedTorchModule):
         return h_2_t
 
     def extra_repr(self):
-        return 'unit_name={}, embedding_size={}, hidden_size={}, dictionary_size={}'.format(
+        return "unit_name={}, embedding_size={}, hidden_size={}, dictionary_size={}".format(
             self.unit_name, self.embedding_size, self.hidden_size, self.dictionary_size
         )

@@ -1,7 +1,9 @@
 # nalu-stable-exp]$ python_lfs_job.sh /home/bm4g15/nalu-stable-exp/stable_nalu/dataset/single_layer_check.py
-from stable_nalu.dataset import SimpleFunctionStaticDataset
-import torch
 import csv
+
+import torch
+
+from stable_nalu.dataset import SimpleFunctionStaticDataset
 
 torch.set_default_dtype(torch.float64)
 max_iterations = 999  # number of data items to generate: n-1
@@ -22,13 +24,13 @@ def init_dataset(op):
 
 
 def do_operation(tensor, op):
-    if op == 'add':
+    if op == "add":
         return tensor.squeeze()[0] + tensor.squeeze()[1]
-    elif op == 'sub':
+    elif op == "sub":
         return tensor.squeeze()[0] - tensor.squeeze()[1]
-    elif op == 'mul':
+    elif op == "mul":
         return tensor.squeeze()[0] * tensor.squeeze()[1]
-    elif op == 'div':
+    elif op == "div":
         return tensor.squeeze()[0] / tensor.squeeze()[1]
     # elif op == 'squared':
     #     return tensor.squeeze()[0] ** 2
@@ -36,15 +38,46 @@ def do_operation(tensor, op):
     #     return torch.sqrt(tensor.squeeze()[0])
 
 
-with open('stable_nalu/dataset/single_layer_check_float64.csv', mode='w', newline='') as csv_file:
-    fieldnames = ['range', 'range type', 'operation', 'failure rate (1E-4)%', 'failure rate (1E-5)%',
-                  'failure rate (1E-6)%', 'failure rate (1E-7)%', 'failure rate (1E-8)%', 'failure rate (equality)%', 'train type', 'target type']
+with open(
+    "stable_nalu/dataset/single_layer_check_float64.csv", mode="w", newline=""
+) as csv_file:
+    fieldnames = [
+        "range",
+        "range type",
+        "operation",
+        "failure rate (1E-4)%",
+        "failure rate (1E-5)%",
+        "failure rate (1E-6)%",
+        "failure rate (1E-7)%",
+        "failure rate (1E-8)%",
+        "failure rate (equality)%",
+        "train type",
+        "target type",
+    ]
     writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
     writer.writeheader()
 
-    for operation in ['add', 'sub', 'mul', 'div']:
-        for r in [[-20, -10], [-2, -1], [-1.2, -1.1], [-0.2, -0.1], [-2, 2], [0.1, 0.2], [1, 2], [1.1, 1.2], [10, 20],
-                  [-40, -20], [-6, -2], [-6.1, -1.2], [-2, -0.2], [[-6, -2], [2, 6]], [0.2, 2], [2, 6], [1.2, 6], [20, 40]]:
+    for operation in ["add", "sub", "mul", "div"]:
+        for r in [
+            [-20, -10],
+            [-2, -1],
+            [-1.2, -1.1],
+            [-0.2, -0.1],
+            [-2, 2],
+            [0.1, 0.2],
+            [1, 2],
+            [1.1, 1.2],
+            [10, 20],
+            [-40, -20],
+            [-6, -2],
+            [-6.1, -1.2],
+            [-2, -0.2],
+            [[-6, -2], [2, 6]],
+            [0.2, 2],
+            [2, 6],
+            [1.2, 6],
+            [20, 40],
+        ]:
             # create dataset
             ds = init_dataset(operation)
             dataset = iter(ds.fork(sample_range=r).dataloader(batch_size=1))
@@ -58,7 +91,9 @@ with open('stable_nalu/dataset/single_layer_check_float64.csv', mode='w', newlin
             fails_p8 = 0  # for datapoints where the precision of the operation was not within 1E-8
 
             for epoch_i, (x_train, t_train) in zip(range(max_iterations + 1), dataset):
-                result_from_inputs = do_operation(x_train, operation).item()  # apply operation and get data item stored
+                result_from_inputs = do_operation(
+                    x_train, operation
+                ).item()  # apply operation and get data item stored
                 if result_from_inputs != t_train.item():
                     fails_equality += 1
                 # check squared error
@@ -75,18 +110,22 @@ with open('stable_nalu/dataset/single_layer_check_float64.csv', mode='w', newlin
                 if (result_from_inputs - t_train.item()) ** 2 > 1e-8:
                     fails_p8 += 1
 
-            writer.writerow({'range': f'U{r}',
-                             'operation': operation,
-                             # 'failure rate (1E-3)%': (fails_p3 / (max_iterations + 1)) * 100,
-                             'failure rate (1E-4)%': (fails_p4 / (max_iterations + 1)) * 100,
-                             'failure rate (1E-5)%': (fails_p5 / (max_iterations + 1)) * 100,
-                             'failure rate (1E-6)%': (fails_p6 / (max_iterations + 1)) * 100,
-                             'failure rate (1E-7)%': (fails_p7 / (max_iterations + 1)) * 100,
-                             'failure rate (1E-8)%': (fails_p8 / (max_iterations + 1)) * 100,
-                             'failure rate (equality)%': (fails_equality / (max_iterations + 1)) * 100,
-                             'train type': f'{x_train.dtype}',
-                             'target type': f'{t_train.dtype}',
-                             })
+            writer.writerow(
+                {
+                    "range": f"U{r}",
+                    "operation": operation,
+                    # 'failure rate (1E-3)%': (fails_p3 / (max_iterations + 1)) * 100,
+                    "failure rate (1E-4)%": (fails_p4 / (max_iterations + 1)) * 100,
+                    "failure rate (1E-5)%": (fails_p5 / (max_iterations + 1)) * 100,
+                    "failure rate (1E-6)%": (fails_p6 / (max_iterations + 1)) * 100,
+                    "failure rate (1E-7)%": (fails_p7 / (max_iterations + 1)) * 100,
+                    "failure rate (1E-8)%": (fails_p8 / (max_iterations + 1)) * 100,
+                    "failure rate (equality)%": (fails_equality / (max_iterations + 1))
+                    * 100,
+                    "train type": f"{x_train.dtype}",
+                    "target type": f"{t_train.dtype}",
+                }
+            )
 
             # with open('single_layer_check.txt', 'a') as out_file:
             #     out_file.write("* " * 7 + operation + " *" * 7 + "\n")

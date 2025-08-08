@@ -1,3 +1,3 @@
-
+from .save_model import (load_model, save_model, save_model_checkpoint,
+                         save_model_params)
 from .summary_writer import DummySummaryWriter, SummaryWriter
-from .save_model import save_model, save_model_checkpoint, load_model, save_model_params

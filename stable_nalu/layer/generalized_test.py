@@ -1,16 +1,15 @@
-
-from nose.tools import *
-
 import numpy as np
 import torch
+from nose.tools import *
 
 from stable_nalu.layer import GeneralizedLayer
+
 
 def test_generalized_layer_linear():
     x_np = np.random.randn(64, 100).astype(np.float32)
     x_tensor = torch.tensor(x_np)
 
-    layer = GeneralizedLayer(100, 2, 'linear')
+    layer = GeneralizedLayer(100, 2, "linear")
     layer.reset_parameters()
     y_tensor = layer(x_tensor)
 

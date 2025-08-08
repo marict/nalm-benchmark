@@ -1,5 +1,5 @@
-
 import torch
+
 
 def batch_linear(x, W, b=None):
     """Computes y_i = x_i W_i + b_i where i is each observation index.
@@ -13,11 +13,13 @@ def batch_linear(x, W, b=None):
     """
     if x.size()[1] != W.size()[-1]:
         raise ValueError(
-            f'the in_dim of x ({x.size()[1]}) does not match in_dim of W ({W.size()[-1]})')
+            f"the in_dim of x ({x.size()[1]}) does not match in_dim of W ({W.size()[-1]})"
+        )
 
     if x.size()[0] != W.size()[0]:
         raise ValueError(
-            f'the obs of x ({x.size()[0]}) does not match obs of W ({W.size()[0]})')
+            f"the obs of x ({x.size()[0]}) does not match obs of W ({W.size()[0]})"
+        )
 
     obs = x.size()[0]
     in_dims = x.size()[1]

@@ -1,4 +1,6 @@
-def get_train_criterion(criterion, mse, pcc, mape, current_iteration, pcc2mse_iteration):
+def get_train_criterion(
+    criterion, mse, pcc, mape, current_iteration, pcc2mse_iteration
+):
     """
 
     Args:
@@ -10,13 +12,13 @@ def get_train_criterion(criterion, mse, pcc, mape, current_iteration, pcc2mse_it
             loss to an mse loss
     Returns: loss values
     """
-    if criterion == 'mse':
+    if criterion == "mse":
         return mse
-    elif criterion == 'mape':
+    elif criterion == "mape":
         return mape
-    elif criterion == 'pcc':
+    elif criterion == "pcc":
         return pcc
-    elif criterion == 'pcc-mse':
+    elif criterion == "pcc-mse":
         return pcc if current_iteration < pcc2mse_iteration else mse
     else:
-        raise ValueError(f'{criterion} is not a valid train criterion option')
+        raise ValueError(f"{criterion} is not a valid train criterion option")

@@ -1,4 +1,5 @@
 import numpy as np
+
 from ._single_layer_abstract import SingleLayerDataset
 
 """
@@ -10,12 +11,11 @@ When using this dataset, the output-size == num-subsets !!!
     
 NOTE: atm only supports mul or add operations
 """
+
+
 class SingleLayerStaticDataset(SingleLayerDataset):
-    def __init__(self, operation,
-                 input_size=2,
-                 **kwargs):
-        super().__init__(operation, input_size,
-                         **kwargs)
+    def __init__(self, operation, input_size=2, **kwargs):
+        super().__init__(operation, input_size, **kwargs)
 
     def fork(self, sample_range=[1, 2], *args, **kwargs):
         return super().fork((self._input_size,), sample_range, *args, **kwargs)

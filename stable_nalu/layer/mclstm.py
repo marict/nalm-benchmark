@@ -19,8 +19,9 @@ from torch import nn
 
 class MCLSTMCell(nn.Module):
 
-    def __init__(self, in_features: int, out_features: int,
-                 cumulative: bool = False, **kwargs):
+    def __init__(
+        self, in_features: int, out_features: int, cumulative: bool = False, **kwargs
+    ):
         super().__init__()
         self.mass_input_size = in_features
         self.aux_input_size = 1
@@ -29,21 +30,25 @@ class MCLSTMCell(nn.Module):
         self.cumulative = cumulative
 
         self.out_gate = Gate(self.hidden_size, self.aux_input_size)
-        self.junction = get_redistribution(kwargs.get('junct', "gate"),
-                                           num_states=self.mass_input_size,
-                                           num_features=self.aux_input_size,
-                                           num_out=self.hidden_size,
-                                           normaliser=self.normaliser)
-        self.redistribution = get_redistribution(kwargs.get('redist', 'linear'),
-                                                 num_states=self.hidden_size,
-                                                 num_features=self.aux_input_size,
-                                                 normaliser=self.normaliser)
+        self.junction = get_redistribution(
+            kwargs.get("junct", "gate"),
+            num_states=self.mass_input_size,
+            num_features=self.aux_input_size,
+            num_out=self.hidden_size,
+            normaliser=self.normaliser,
+        )
+        self.redistribution = get_redistribution(
+            kwargs.get("redist", "linear"),
+            num_states=self.hidden_size,
+            num_features=self.aux_input_size,
+            normaliser=self.normaliser,
+        )
         print(self.junction)
         print(self.redistribution)
 
     def reset_parameters(self):
         self.out_gate.reset_parameters()
-        nn.init.constant_(self.out_gate.fc.bias, -3.)
+        nn.init.constant_(self.out_gate.fc.bias, -3.0)
         self.junction.reset_parameters()
         self.redistribution.reset_parameters()
 
@@ -61,16 +66,20 @@ class MCLSTMCell(nn.Module):
             return o * m_new, (1 - o) * m_new
 
 
-def get_redistribution(kind: str,
-                       num_states: int,
-                       num_features: int = None,
-                       num_out: int = None,
-                       normaliser: nn.Module = None,
-                       **kwargs):
+def get_redistribution(
+    kind: str,
+    num_states: int,
+    num_features: int = None,
+    num_out: int = None,
+    normaliser: nn.Module = None,
+    **kwargs
+):
     if kind == "linear":
         return LinearRedistribution(num_states, num_features, num_out, normaliser)
     elif kind == "outer":
-        return OuterRedistribution(num_states, num_features, num_out, normaliser, **kwargs)
+        return OuterRedistribution(
+            num_states, num_features, num_out, normaliser, **kwargs
+        )
     elif kind == "gate":
         return GateRedistribution(num_states, num_features, num_out, normaliser)
     else:
@@ -78,7 +87,7 @@ def get_redistribution(kind: str,
 
 
 class NormalisedSigmoid(nn.Module):
-    """ Normalised logistic sigmoid function. """
+    """Normalised logistic sigmoid function."""
 
     def __init__(self, p: float = 1, dim: int = -1):
         super().__init__()
@@ -91,9 +100,15 @@ class NormalisedSigmoid(nn.Module):
 
 
 class Redistribution(nn.Module):
-    """ Base class for modules that generate redistribution vectors/matrices. """
+    """Base class for modules that generate redistribution vectors/matrices."""
 
-    def __init__(self, num_states: int, num_features: int = None, num_out: int = None, normaliser: nn.Module = None):
+    def __init__(
+        self,
+        num_states: int,
+        num_features: int = None,
+        num_out: int = None,
+        normaliser: nn.Module = None,
+    ):
         """
         Parameters
         ----------
@@ -157,7 +172,9 @@ class LinearRedistribution(Redistribution):
 
     def __init__(self, num_states, num_features=0, num_out=None, normaliser=None):
         super(LinearRedistribution, self).__init__(num_states, 0, num_out, normaliser)
-        self.r = nn.Parameter(torch.empty(self.num_states, self.num_out), requires_grad=True)
+        self.r = nn.Parameter(
+            torch.empty(self.num_states, self.num_out), requires_grad=True
+        )
         self.reset_parameters()
 
     @torch.no_grad()
@@ -196,7 +213,7 @@ class GateRedistribution(Redistribution):
         if self.num_states == self.num_out:
             # identity matrix initialisation for output
             with torch.no_grad():
-                self.fc.bias[0::(self.num_out + 1)] = 3
+                self.fc.bias[0 :: (self.num_out + 1)] = 3
 
     def _compute(self, x: torch.Tensor) -> torch.Tensor:
         logits = self.fc(x)
@@ -214,16 +231,27 @@ class OuterRedistribution(Redistribution):
     The weight matrix parameter is updated through the gradients to fit the data.
     """
 
-    def __init__(self, num_states, num_features, num_out=None, normaliser=None, weighted: bool = False):
+    def __init__(
+        self,
+        num_states,
+        num_features,
+        num_out=None,
+        normaliser=None,
+        weighted: bool = False,
+    ):
         """
         Parameters
         ----------
         weighted : bool, optional
             Whether or not to use a weighted outer product.
         """
-        super(OuterRedistribution, self).__init__(num_states, num_features, num_out, normaliser)
+        super(OuterRedistribution, self).__init__(
+            num_states, num_features, num_out, normaliser
+        )
         self.weighted = weighted
-        self.r = nn.Parameter(torch.empty(self.num_states, self.num_out), requires_grad=weighted)
+        self.r = nn.Parameter(
+            torch.empty(self.num_states, self.num_out), requires_grad=weighted
+        )
 
         self.fc1 = nn.Linear(num_features, self.num_states)
         self.fc2 = nn.Linear(num_features, self.num_out)

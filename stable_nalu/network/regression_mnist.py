@@ -1,28 +1,34 @@
-
 import torch
+
 from ..abstract import ExtendedTorchModule
-from ..layer import GeneralizedLayer, GeneralizedCell
+from ..layer import GeneralizedCell, GeneralizedLayer
 
 # Copied from https://github.com/pytorch/examples/blob/master/mnist/main.py, just added a
 # reset_parameters method and changed final layer to have one output.
 
+
 class RegressionMnistNetwork(ExtendedTorchModule):
-    def __init__(self,
-                 mnist_digits=[0,1,2,3,4,5,6,7,8,9],
-                 softmax_transform=False,
-                 mnist_outputs=1, **kwargs):
-        super().__init__('cnn', **kwargs)
+    def __init__(
+        self,
+        mnist_digits=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        softmax_transform=False,
+        mnist_outputs=1,
+        **kwargs,
+    ):
+        super().__init__("cnn", **kwargs)
         self._softmax_transform = softmax_transform
 
         self.conv1 = torch.nn.Conv2d(1, 20, 5, 1)
         self.conv2 = torch.nn.Conv2d(20, 50, 5, 1)
-        self.fc1 = torch.nn.Linear(4*4*50, 500)
+        self.fc1 = torch.nn.Linear(4 * 4 * 50, 500)
         if self._softmax_transform:
             if mnist_outputs:
                 raise ValueError(f"mnist_outputs can't be > 1 with softmax_transform")
 
             self.fc2 = torch.nn.Linear(500, len(mnist_digits))
-            self.register_buffer('fc3', torch.tensor(mnist_digits, dtype=torch.float32).reshape(1, -1))
+            self.register_buffer(
+                "fc3", torch.tensor(mnist_digits, dtype=torch.float32).reshape(1, -1)
+            )
         else:
             self.fc2 = torch.nn.Linear(500, mnist_outputs)
 
@@ -37,7 +43,7 @@ class RegressionMnistNetwork(ExtendedTorchModule):
         x = torch.nn.functional.max_pool2d(x, 2, 2)
         x = torch.nn.functional.relu(self.conv2(x))
         x = torch.nn.functional.max_pool2d(x, 2, 2)
-        x = x.view(-1, 4*4*50)
+        x = x.view(-1, 4 * 4 * 50)
         x = torch.nn.functional.relu(self.fc1(x))
         x = self.fc2(x)
 

@@ -1,5 +1,5 @@
-
 import torch
+
 
 def sample_gumbel(placeholder, eps=1e-10, reuse=False):
     """Samples Gumbel(0, 1) values into the placeholder"""
@@ -13,6 +13,7 @@ def sample_gumbel(placeholder, eps=1e-10, reuse=False):
     # Inverse transform
     g = -torch.log(-torch.log(uniform))
     return g
+
 
 def sample_gumbel_softmax(placeholder, logits, tau, **kwargs):
     """Samples values from a gumbel softmax
@@ -29,6 +30,7 @@ def sample_gumbel_softmax(placeholder, logits, tau, **kwargs):
     """
     g = sample_gumbel(placeholder, **kwargs)
     return torch.nn.functional.softmax((logits + g) / tau, dim=-1)
+
 
 def sample_gumbel_max(placeholder, logits, **kwargs):
     """Samples values from a gumbel max

@@ -1,17 +1,16 @@
-
-from nose.tools import *
-
 import numpy as np
 import torch
+from nose.tools import *
 
 from stable_nalu.layer import BasicLayer
+
 
 def test_basic_layer_linear():
     x_np = np.random.RandomState(1).randn(64, 100).astype(np.float32)
     x_tensor = torch.tensor(x_np)
 
     torch.manual_seed(1)
-    layer = BasicLayer(100, 2, activation='linear')
+    layer = BasicLayer(100, 2, activation="linear")
     layer.reset_parameters()
     y_tensor = layer(x_tensor)
 

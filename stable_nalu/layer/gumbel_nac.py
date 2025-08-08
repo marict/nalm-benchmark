@@ -1,9 +1,9 @@
-
 import torch
 
 from ..abstract import ExtendedTorchModule
-from ..functional import sample_gumbel_softmax, batch_linear
+from ..functional import batch_linear, sample_gumbel_softmax
 from ._abstract_recurrent_cell import AbstractRecurrentCell
+
 
 class GumbelNACLayer(ExtendedTorchModule):
     """Implements the NAC (Neural Accumulator)
@@ -13,18 +13,24 @@ class GumbelNACLayer(ExtendedTorchModule):
         out_features: number of outgoing features
     """
 
-    def __init__(self, in_features, out_features, sample_each_observation=False, **kwargs):
-        super().__init__('nac', **kwargs)
+    def __init__(
+        self, in_features, out_features, sample_each_observation=False, **kwargs
+    ):
+        super().__init__("nac", **kwargs)
         self.in_features = in_features
         self.out_features = out_features
         self.sample_each_observation = sample_each_observation
 
         # Define the temperature tau
-        self.tau = torch.nn.Parameter(torch.tensor(1, dtype=torch.float32), requires_grad=False)
+        self.tau = torch.nn.Parameter(
+            torch.tensor(1, dtype=torch.float32), requires_grad=False
+        )
 
         # Define the target weights. Also, put 0 last such that p1 = p2 = 0
         # corresponds to p3 = 1 => w = 0.
-        self.register_buffer('target_weights', torch.tensor([1, -1, 0], dtype=torch.float32))
+        self.register_buffer(
+            "target_weights", torch.tensor([1, -1, 0], dtype=torch.float32)
+        )
 
         # Initialize a tensor, that will be the placeholder for the uniform samples
         self.U = torch.Tensor(out_features, in_features, 3)
@@ -33,9 +39,9 @@ class GumbelNACLayer(ExtendedTorchModule):
         # there would otherwise exist. This also makes it much more comparable with
         # NAC.
         self.W_hat = torch.nn.Parameter(torch.Tensor(out_features, in_features, 2))
-        self.register_buffer('W_hat_k', torch.Tensor(out_features, in_features, 1))
+        self.register_buffer("W_hat_k", torch.Tensor(out_features, in_features, 1))
 
-        self.register_parameter('bias', None)
+        self.register_parameter("bias", None)
 
     def reset_parameters(self):
         # Initialize to zero, the source of randomness can come from the Gumbel sampling.
@@ -45,7 +51,9 @@ class GumbelNACLayer(ExtendedTorchModule):
 
     def forward(self, input, reuse=False):
         # Concat trainable and non-trainable weights
-        W_hat_full = torch.cat((self.W_hat, self.W_hat_k), dim=-1)  # size = [out, in, 3]
+        W_hat_full = torch.cat(
+            (self.W_hat, self.W_hat_k), dim=-1
+        )  # size = [out, in, 3]
 
         # Convert to log-properbilities
         # NOTE: softmax(log(softmax(w)) + g) can be simplified to softmax(w + g), taking
@@ -62,14 +70,17 @@ class GumbelNACLayer(ExtendedTorchModule):
         W = y @ self.target_weights
 
         # Compute the linear multiplication as usual
-        self.writer.add_histogram('W', torch.exp(log_pi) @ self.target_weights)
-        self.writer.add_tensor('W', torch.exp(log_pi) @ self.target_weights, verbose_only=False)
+        self.writer.add_histogram("W", torch.exp(log_pi) @ self.target_weights)
+        self.writer.add_tensor(
+            "W", torch.exp(log_pi) @ self.target_weights, verbose_only=False
+        )
         return torch.nn.functional.linear(input, W, self.bias)
 
     def extra_repr(self):
-        return 'in_features={}, out_features={}'.format(
+        return "in_features={}, out_features={}".format(
             self.in_features, self.out_features
         )
+
 
 class GumbelNACCell(AbstractRecurrentCell):
     """Implements the Gumbel NAC (Gumbel Neural Accumulator) as a recurrent cell
@@ -78,5 +89,6 @@ class GumbelNACCell(AbstractRecurrentCell):
         input_size: number of ingoing features
         hidden_size: number of outgoing features
     """
+
     def __init__(self, input_size, hidden_size, **kwargs):
         super().__init__(GumbelNACLayer, input_size, hidden_size, **kwargs)

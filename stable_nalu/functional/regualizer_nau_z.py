@@ -1,5 +1,5 @@
-
 import torch
+
 
 class RegualizerNAUZ:
     def __init__(self, zero=False):
@@ -10,11 +10,8 @@ class RegualizerNAUZ:
         if self.zero:
             return 0
 
-        x_mean = torch.mean(
-            torch.cat(self.stored_inputs, dim=0),
-            dim=0, keepdim=True
-        )
-        return torch.mean((1 - torch.abs(W)) * (0 - x_mean)**2)
+        x_mean = torch.mean(torch.cat(self.stored_inputs, dim=0), dim=0, keepdim=True)
+        return torch.mean((1 - torch.abs(W)) * (0 - x_mean) ** 2)
 
     def append_input(self, x):
         if self.zero:

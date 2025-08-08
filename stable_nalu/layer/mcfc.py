@@ -15,32 +15,35 @@ MulMCFCSignRealNPU
    eprint = {2101.05186},
 }
 """
+
 import math
 
 import torch
 from torch import nn
 
 from stable_nalu.abstract import ExtendedTorchModule
-from stable_nalu.layer.mclstm import get_redistribution, Gate
-from ..functional import mnac, Regualizer
-from ..functional import sparsity_error
+from stable_nalu.layer.mclstm import Gate, get_redistribution
+
+from ..functional import Regualizer, mnac, sparsity_error
 
 
 class MCFullyConnected(ExtendedTorchModule):
 
     def __init__(self, in_features: int, out_features: int, **kwargs):
-        super().__init__('MCFC', **kwargs)
+        super().__init__("MCFC", **kwargs)
         self.mass_input_size = in_features
         self.aux_input_size = 1
         self.hidden_size = out_features
         self.normaliser = nn.Softmax(dim=-1)
 
         self.out_gate = Gate(self.hidden_size, self.aux_input_size)
-        self.junction = get_redistribution("linear",
-                                           num_states=self.mass_input_size,
-                                           num_features=self.aux_input_size,
-                                           num_out=self.hidden_size,
-                                           normaliser=self.normaliser)
+        self.junction = get_redistribution(
+            "linear",
+            num_states=self.mass_input_size,
+            num_features=self.aux_input_size,
+            num_out=self.hidden_size,
+            normaliser=self.normaliser,
+        )
 
     @torch.no_grad()
     def reset_parameters(self):
@@ -50,16 +53,14 @@ class MCFullyConnected(ExtendedTorchModule):
     def log_gradients(self):
         for name, parameter in self.named_parameters():
             gradient, *_ = parameter.grad.data
-            self.writer.add_summary(f'{name}/grad', gradient)
-            self.writer.add_histogram(f'{name}/grad', gradient)
+            self.writer.add_summary(f"{name}/grad", gradient)
+            self.writer.add_histogram(f"{name}/grad", gradient)
 
     def regualizer(self, merge_in=None):
-        r1 = -torch.mean(self.junction.r ** 2)
-        r2 = -torch.mean(self.out_gate.fc.weight ** 2)
-        r3 = -torch.mean(self.out_gate.fc.bias ** 2)
-        return super().regualizer({
-            'W': r1 + r2 + r3
-        })
+        r1 = -torch.mean(self.junction.r**2)
+        r2 = -torch.mean(self.out_gate.fc.weight**2)
+        r3 = -torch.mean(self.out_gate.fc.bias**2)
+        return super().regualizer({"W": r1 + r2 + r3})
 
     def forward(self, x):
         x_m, x_a = x, x.new_ones(1)
@@ -68,11 +69,26 @@ class MCFullyConnected(ExtendedTorchModule):
 
         # don't really need this for the 1 layer 2-input task (since the junction should always be 1 so the SE is always 0)
         # but included for completion
-        self.writer.add_tensor('mcfc_junction', j, verbose_only=False if self.use_robustness_exp_logging else True)
-        self.writer.add_scalar('mcfc_junction/sparsity_error', sparsity_error(j),
-                               verbose_only=self.use_robustness_exp_logging)
-        self.writer.add_tensor('mcfc_out_gate', o, verbose_only=False if self.use_robustness_exp_logging else True)
-        self.writer.add_scalar('mcfc_out_gate/sparsity_error', sparsity_error(o), verbose_only=self.use_robustness_exp_logging)
+        self.writer.add_tensor(
+            "mcfc_junction",
+            j,
+            verbose_only=False if self.use_robustness_exp_logging else True,
+        )
+        self.writer.add_scalar(
+            "mcfc_junction/sparsity_error",
+            sparsity_error(j),
+            verbose_only=self.use_robustness_exp_logging,
+        )
+        self.writer.add_tensor(
+            "mcfc_out_gate",
+            o,
+            verbose_only=False if self.use_robustness_exp_logging else True,
+        )
+        self.writer.add_scalar(
+            "mcfc_out_gate/sparsity_error",
+            sparsity_error(o),
+            verbose_only=self.use_robustness_exp_logging,
+        )
 
         m_in = torch.matmul(x_m.unsqueeze(-2), j).squeeze(-2)
         return o * m_in
@@ -86,7 +102,7 @@ class MulMCFC(ExtendedTorchModule):
     """
 
     def __init__(self, in_features, out_features, **kwargs):
-        super().__init__('MulMCFC', **kwargs)
+        super().__init__("MulMCFC", **kwargs)
         self.mcfc = MCFullyConnected(in_features, out_features, **kwargs)
         self.bias = nn.Parameter(torch.zeros(out_features))
 
@@ -107,16 +123,24 @@ class MulMCFC(ExtendedTorchModule):
         Returns: output tensor
 
         """
-        self.writer.add_tensor('mulmcfc_bias', self.bias,
-                               verbose_only=False if self.use_robustness_exp_logging else True)
-        self.writer.add_scalar('mulmcfc_bias/sparsity_error', sparsity_error(self.bias),
-                               verbose_only=self.use_robustness_exp_logging)
+        self.writer.add_tensor(
+            "mulmcfc_bias",
+            self.bias,
+            verbose_only=False if self.use_robustness_exp_logging else True,
+        )
+        self.writer.add_scalar(
+            "mulmcfc_bias/sparsity_error",
+            sparsity_error(self.bias),
+            verbose_only=self.use_robustness_exp_logging,
+        )
 
         # update input to module with modified input or just use the original input
         x_in = mod_inp_x if mod_inp_x is not None else x
         x_sign = self._sign_fn(x)
-        log_sum = self.mcfc(torch.log(x_in))             # [B,O]
-        return torch.exp(log_sum + self.bias) * x_sign   # [B,O] = exp([B,O] + [O]) * [B,O]
+        log_sum = self.mcfc(torch.log(x_in))  # [B,O]
+        return (
+            torch.exp(log_sum + self.bias) * x_sign
+        )  # [B,O] = exp([B,O] + [O]) * [B,O]
 
 
 class MulMCFCSignINALU(MulMCFC):
@@ -131,8 +155,10 @@ class MulMCFCSignINALU(MulMCFC):
         super(MulMCFCSignINALU, self).__init__(in_features, out_features, **kwargs)
 
     def _sign_fn(self, x):
-        sign_weights = self.mcfc.normaliser(self.mcfc.junction.r)           # [I, O] = [I,O]
-        sign = mnac(x.sign(), sign_weights.t().abs(), mode='prod')          # [B,O] = mnac([B,O], [O,I])
+        sign_weights = self.mcfc.normaliser(self.mcfc.junction.r)  # [I, O] = [I,O]
+        sign = mnac(
+            x.sign(), sign_weights.t().abs(), mode="prod"
+        )  # [B,O] = mnac([B,O], [O,I])
         return sign
 
     def forward(self, x):
@@ -153,11 +179,8 @@ class MulMCFCSignRealNPU(MulMCFC):
         super(MulMCFCSignRealNPU, self).__init__(in_features, out_features, **kwargs)
         self.g = torch.nn.Parameter(torch.Tensor(in_features))
 
-        if kwargs['regualizer_gate']:
-            self._regualizer_g = Regualizer(
-                support='mnac', type='bias',
-                shape='linear'
-            )
+        if kwargs["regualizer_gate"]:
+            self._regualizer_g = Regualizer(support="mnac", type="bias", shape="linear")
         else:
             self._regualizer_g = Regualizer(zero=True)
 
@@ -168,21 +191,31 @@ class MulMCFCSignRealNPU(MulMCFC):
 
     def regualizer(self):
         # penalise g for not being 0 or 1
-        return super().regualizer({
-            'g-NPU': self._regualizer_g(self.g),
-        })
+        return super().regualizer(
+            {
+                "g-NPU": self._regualizer_g(self.g),
+            }
+        )
 
     def _sign_fn(self, x):
-        sign_weights = self.mcfc.normaliser(self.mcfc.junction.r)       # [I, O] = [I,O]
-        g_hat = torch.clamp(self.g, 0.0, 1.0)                           # [in]
-        self.writer.add_tensor('mulmcfcsignrealnpu_g_hat', g_hat,
-                               verbose_only=False if self.use_robustness_exp_logging else True)
-        self.writer.add_scalar('mulmcfcsignrealnpu_g_hat/sparsity_error', sparsity_error(g_hat),
-                               verbose_only=self.use_robustness_exp_logging)
+        sign_weights = self.mcfc.normaliser(self.mcfc.junction.r)  # [I, O] = [I,O]
+        g_hat = torch.clamp(self.g, 0.0, 1.0)  # [in]
+        self.writer.add_tensor(
+            "mulmcfcsignrealnpu_g_hat",
+            g_hat,
+            verbose_only=False if self.use_robustness_exp_logging else True,
+        )
+        self.writer.add_scalar(
+            "mulmcfcsignrealnpu_g_hat/sparsity_error",
+            sparsity_error(g_hat),
+            verbose_only=self.use_robustness_exp_logging,
+        )
 
-        k = torch.max(-torch.sign(x), torch.zeros_like(x)) * math.pi    # [B,I] = max([B, I], [B, I]) * pi
-        k = g_hat * k                                                   # [I] * [B, I]
-        sign = torch.cos(k.matmul(sign_weights))                        # [B,O] = [B, I] * [I,O]
+        k = (
+            torch.max(-torch.sign(x), torch.zeros_like(x)) * math.pi
+        )  # [B,I] = max([B, I], [B, I]) * pi
+        k = g_hat * k  # [I] * [B, I]
+        sign = torch.cos(k.matmul(sign_weights))  # [B,O] = [B, I] * [I,O]
         return sign
 
     def forward(self, x):

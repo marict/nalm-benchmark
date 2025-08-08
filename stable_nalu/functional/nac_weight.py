@@ -1,6 +1,7 @@
-
 import torch
+
 from .golden_ratio_base import sigmoid, tanh
+
 
 class NACWeight(torch.autograd.Function):
     r"""Implements the NAC weight operator
@@ -20,8 +21,8 @@ class NACWeight(torch.autograd.Function):
         tanh_w_hat, sigmoid_m_hat = ctx.saved_tensors
 
         return (
-            grad_output * (1 - tanh_w_hat*tanh_w_hat)*sigmoid_m_hat,
-            grad_output * tanh_w_hat*sigmoid_m_hat*(1-sigmoid_m_hat)
+            grad_output * (1 - tanh_w_hat * tanh_w_hat) * sigmoid_m_hat,
+            grad_output * tanh_w_hat * sigmoid_m_hat * (1 - sigmoid_m_hat),
         )
 
 
@@ -32,6 +33,7 @@ class NACWeightSign(torch.autograd.Function):
     dL/d\hat{m} = (dL/dw) (dw/d\hat{m})
                 = (dL/dw) * 0.1 * sign(\hat{w}) * sigmoid(\hat{m}) * (1 - sigmoid(\hat{m}))
     """
+
     @staticmethod
     def forward(ctx, w_hat, m_hat):
         tanh_w_hat = torch.tanh(w_hat)
@@ -44,8 +46,8 @@ class NACWeightSign(torch.autograd.Function):
         w_hat, tanh_w_hat, sigmoid_m_hat = ctx.saved_tensors
 
         return (
-            grad_output * (1 - tanh_w_hat*tanh_w_hat)*sigmoid_m_hat,
-            grad_output * 0.1*torch.sign(w_hat)*sigmoid_m_hat*(1-sigmoid_m_hat)
+            grad_output * (1 - tanh_w_hat * tanh_w_hat) * sigmoid_m_hat,
+            grad_output * 0.1 * torch.sign(w_hat) * sigmoid_m_hat * (1 - sigmoid_m_hat),
         )
 
 
@@ -62,6 +64,7 @@ class NACWeightIndependent(torch.autograd.Function):
     dL/d\hat{m} = (dL/dw) (dw/d\hat{m})
                 = (dL/dw) sigmoid(\hat{m}) * (1 - sigmoid(\hat{m}))
     """
+
     @staticmethod
     def forward(ctx, w_hat, m_hat):
         tanh_w_hat = torch.tanh(w_hat)
@@ -74,8 +77,8 @@ class NACWeightIndependent(torch.autograd.Function):
         tanh_w_hat, sigmoid_m_hat = ctx.saved_tensors
 
         return (
-            grad_output * (1 - tanh_w_hat*tanh_w_hat),
-            grad_output * sigmoid_m_hat*(1-sigmoid_m_hat)
+            grad_output * (1 - tanh_w_hat * tanh_w_hat),
+            grad_output * sigmoid_m_hat * (1 - sigmoid_m_hat),
         )
 
 
@@ -87,13 +90,13 @@ def nac_base_golden_ratio(w_hat, m_hat):
     return tanh(w_hat) * sigmoid(m_hat)
 
 
-def nac_weight(w_hat, m_hat, mode='normal'):
-    if mode == 'normal':
+def nac_weight(w_hat, m_hat, mode="normal"):
+    if mode == "normal":
         # return nac_base_e(w_hat, m_hat)
         return NACWeight.apply(w_hat, m_hat)
-    elif mode == 'sign':
+    elif mode == "sign":
         return NACWeightSign.apply(w_hat, m_hat)
-    elif mode == 'independent':
+    elif mode == "independent":
         return NACWeightIndependent.apply(w_hat, m_hat)
-    elif mode == 'golden-ratio':
+    elif mode == "golden-ratio":
         return nac_base_golden_ratio(w_hat, m_hat)

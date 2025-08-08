@@ -36,6 +36,30 @@ Generate a conda environment called nalu-env:
 
 Install stable-nalu:
 `python3 setup.py develop'`
+## Run Single Layer DAG benchmark on RunPod
+
+Use the shared launcher at `~/ai2/runpod_service/runpod_service.py`. Ensure this repo is clean and has `requirements_dev.txt` at the root.
+
+Local command (for reference):
+
+```
+python3 experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation add --input-size 3 --batch-size 1000 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0
+```
+
+Run on RunPod:
+
+```
+python /Users/paul_curry/ai2/runpod_service/runpod_service.py \
+  /Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py \
+  --no-cuda --layer-type DAG --operation add --input-size 3 --batch-size 1000 \
+  --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 \
+  --pod-name nalm-dag-benchmark
+```
+
+Notes:
+- Set `RUNPOD_API_KEY` and `WANDB_API_KEY` in your local environment before launching.
+- The pod stays alive; the script should stop the pod when complete if desired.
+
 
 ## Recreating Experiments From the Paper:
 First, create a csv file containing the threshold values for each range using 

@@ -1,5 +1,5 @@
-
 import os.path as path
+
 import numpy as np
 import torch
 import torch.utils.data
@@ -8,36 +8,36 @@ import torchvision
 from ._dataloader import DataLoaderCudaWrapper
 
 id2token = [
-    '<pad>',
-    'and',
-    'one',
-    'two',
-    'three',
-    'four',
-    'five',
-    'six',
-    'seven',
-    'eight',
-    'nine',
-    'ten',
-    'eleven',
-    'twelve',
-    'thirteen',
-    'fourteen',
-    'fifteen',
-    'sixteen',
-    'seventeen',
-    'eighteen',
-    'nineteen',
-    'twenty',
-    'thirty',
-    'forty',
-    'fifty',
-    'sixty',
-    'seventy',
-    'eighty',
-    'ninety',
-    'hundred'
+    "<pad>",
+    "and",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
+    "twenty",
+    "thirty",
+    "forty",
+    "fifty",
+    "sixty",
+    "seventy",
+    "eighty",
+    "ninety",
+    "hundred",
 ]
 first_ten_tokens = id2token[2:11]
 first_twenty_tokens = id2token[2:21]
@@ -46,16 +46,11 @@ pad_token = id2token[0]
 and_token = id2token[1]
 hundred_token = id2token[-1]
 
-token2id = {
-    token: id
-    for id, token in enumerate(id2token)
-}
+token2id = {token: id for id, token in enumerate(id2token)}
+
 
 class NumberTranslationDataset:
-    def __init__(self,
-                 num_workers=1,
-                 seed=None,
-                 use_cuda=False):
+    def __init__(self, num_workers=1, seed=None, use_cuda=False):
         super().__init__()
 
         self._num_workers = num_workers
@@ -82,8 +77,8 @@ class NumberTranslationDataset:
             # the training set, then include it in the training set before
             # any other dataset.
             if len(missing_train_ids) and len(missing_train_ids & set(ids)) > 0:
-                    self._train_samples.append((ids, number))
-                    missing_train_ids -= set(ids)
+                self._train_samples.append((ids, number))
+                missing_train_ids -= set(ids)
             # Because the above filter creates a slight bias, for less unique
             # tokens, fill the test dataset first as this is the biggest. Thus
             # the bias is going to matter the least.
@@ -104,7 +99,7 @@ class NumberTranslationDataset:
     @staticmethod
     def encode(number, as_strings=False):
         if number <= 0 or number >= 1000:
-            raise ValueError(f'{number} must be between [1, 999]')
+            raise ValueError(f"{number} must be between [1, 999]")
 
         hundreds = number // 100
         tens = (number % 100) // 10
@@ -136,18 +131,21 @@ class NumberTranslationDataset:
             tokens += [pad_token] * (5 - len(tokens))
             return np.asarray([token2id[token] for token in tokens], dtype=np.int64)
 
-    def fork(self, subset='train'):
-        if subset not in {'train', 'valid', 'test'}:
-            raise ValueError(f'subset must be either train, valid or test, it is {subset}')
+    def fork(self, subset="train"):
+        if subset not in {"train", "valid", "test"}:
+            raise ValueError(
+                f"subset must be either train, valid or test, it is {subset}"
+            )
 
-        if subset == 'train':
+        if subset == "train":
             dataset = self._train_samples
-        elif subset == 'valid':
+        elif subset == "valid":
             dataset = self._valid_samples
-        elif subset == 'test':
+        elif subset == "test":
             dataset = self._test_samples
 
         return NumberTranslationDatasetFork(self, dataset)
+
 
 class NumberTranslationDatasetFork(torch.utils.data.Dataset):
     def __init__(self, parent, dataset):
@@ -163,7 +161,7 @@ class NumberTranslationDatasetFork(torch.utils.data.Dataset):
 
         return (
             torch.tensor(x, dtype=torch.int64),
-            torch.tensor([t], dtype=torch.float32)
+            torch.tensor([t], dtype=torch.float32),
         )
 
     def __len__(self):
@@ -171,10 +169,8 @@ class NumberTranslationDatasetFork(torch.utils.data.Dataset):
 
     def dataloader(self, batch_size=64, shuffle=True):
         batcher = torch.utils.data.DataLoader(
-            self,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=self._num_workers)
+            self, batch_size=batch_size, shuffle=shuffle, num_workers=self._num_workers
+        )
 
         if self._use_cuda:
             return DataLoaderCudaWrapper(batcher)

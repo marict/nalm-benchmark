@@ -11,7 +11,6 @@ from pathlib import Path
 
 import wandb
 
-
 TRAIN_LINE_RE = re.compile(
     r"^train\s+(\d+):\s+([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?),\s+inter:\s+([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?),\s+extra:\s+([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?)$"
 )
@@ -120,5 +119,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
