@@ -11,6 +11,9 @@ import torch
 import misc.utils as utils
 import stable_nalu
 import stable_nalu.functional.regualizer as Regualizer
+import wandb
+
+wandb.init()
 
 # Parse arguments
 parser = argparse.ArgumentParser(description="Runs the simple function static task")
@@ -842,6 +845,14 @@ for epoch_i, (x_train, t_train) in zip(
         summary_writer.add_scalar("loss/train/critation", loss_train_criterion)
         summary_writer.add_scalar("loss/train/regualizer", loss_train_regualizer)
         summary_writer.add_scalar("loss/train/total", loss_train)
+        wandb.log(
+            {
+                "loss/train": float(loss_train_criterion.detach().cpu().item()),
+                "mse/inter": float(interpolation_error.detach().cpu().item()),
+                "mse/extra": float(extrapolation_error.detach().cpu().item()),
+            },
+            step=epoch_i,
+        )
     if epoch_i % args.log_interval == 0:
         print(
             "train %d: %.5f, inter: %.5f, extra: %.5f"
