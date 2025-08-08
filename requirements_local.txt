@@ -6,3 +6,5 @@ tensorboard
 tensorboardX
 wandb
 matplotlib
+graphql-core
+runpod
