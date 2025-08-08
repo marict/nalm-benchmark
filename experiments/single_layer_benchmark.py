@@ -14,6 +14,9 @@ import stable_nalu.functional.regualizer as Regualizer
 import wandb
 
 wandb.init()
+print(
+    f"Initialized W&B, run id: {wandb.run.id}, url: {wandb.run.url}, name: {wandb.run.name}"
+)
 
 # Parse arguments
 parser = argparse.ArgumentParser(description="Runs the simple function static task")
