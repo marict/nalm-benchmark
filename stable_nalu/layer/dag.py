@@ -52,8 +52,7 @@ class DAGLayer(ExtendedTorchModule):
         dag_depth: int | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        use_ste_O: bool = False,
-        use_ste_G: bool = True,  # Always on
+        use_ste: bool = False,
         use_layer_norm: bool = True,
         use_extra_layer_norm: bool = True,
         use_sparsemax_select: bool = True,
@@ -79,8 +78,7 @@ class DAGLayer(ExtendedTorchModule):
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
-        self.use_ste_O = bool(use_ste_O)
-        self.use_ste_G = bool(use_ste_G)
+        self.use_ste = bool(use_ste)
         self.use_sparsemax_select = bool(use_sparsemax_select)
 
         # Normalize inputs and optionally add extra normalization around structure heads
@@ -127,6 +125,9 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
+        # Initialize G scale to a moderate sharpness (s≈2)
+        with torch.no_grad():
+            self.G_scale_raw.fill_(torch.log(torch.exp(torch.tensor(2.0)) - 1.0))
 
         # Numerical guards
         self._mag_min = 1e-6
@@ -275,13 +276,14 @@ class DAGLayer(ExtendedTorchModule):
 
         # Optional STE discretisation in training for stability/inductive bias
         if self.training:
-            if self.use_ste_G:
+            if self.use_ste:
+                # Discrete gate via straight-through
                 G_hard = (G > 0.5).to(G.dtype)
                 G = G_hard + (G - G.detach())
-            if self.use_ste_O:
+                # Discrete operand selection via straight-through
                 O = self._ste_round(O).clamp(-1.0, 1.0)
             else:
-                # Train with continuous bounded coefficients (no rounding)
+                # Train with continuous bounded coefficients (no rounding for sparsemax)
                 if not self.use_sparsemax_select:
                     O = torch.tanh(O)
         else:
