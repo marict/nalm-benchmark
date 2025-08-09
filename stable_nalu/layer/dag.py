@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ..abstract import ExtendedTorchModule
 
@@ -91,13 +92,11 @@ class DAGLayer(ExtendedTorchModule):
         else:
             self.head_norm = None
 
-        # Extra normalization for per-step logits (O) and gate logits (G)
+        # Extra normalization for per-step logits (O). G_norm is disabled per design
         if self.use_extra_layer_norm:
             self.O_norm = nn.LayerNorm(self.total_nodes)
-            self.G_norm = nn.LayerNorm(self.dag_depth)
         else:
             self.O_norm = None
-            self.G_norm = None
 
         # Small prediction heads mapping input -> structure
         # Operand selector matrix O: shape (dag_depth, total_nodes)
@@ -114,6 +113,8 @@ class DAGLayer(ExtendedTorchModule):
             self.O_scale = None
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
+        # Learnable positive scale applied to G logits (per-step)
+        self.G_scale_raw = nn.Parameter(torch.zeros(self.dag_depth))
 
         # Initialize heads similar to standard small heads
         nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
@@ -261,8 +262,9 @@ class DAGLayer(ExtendedTorchModule):
                 O = self.O_norm(O)
             O = O.to(dtype)
         G_logits = self.G_head(head_input)  # (B, dag_depth)
-        if self.G_norm is not None:
-            G_logits = self.G_norm(G_logits)
+        # Apply learnable sharpness scale to drive commitment away from 0.5
+        G_scale = F.softplus(self.G_scale_raw).to(G_logits.dtype) + 1e-6
+        G_logits = G_logits * G_scale.view(1, -1)
         G = torch.sigmoid(G_logits).to(dtype)
 
         # Optionally freeze G to linear domain (G==1)
