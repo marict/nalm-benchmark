@@ -10,10 +10,12 @@ grokking commands:
 
 python3 experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation add --input-size 3 --batch-size 1000 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0
 
-
-python3 experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation mul --input-size 3 --batch-size 1000 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0
+python3 experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation mul --input-size 3 --batch-size 256 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0
 
 Things to try (on cloud):
+
+python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation mul --input-size 100 --batch-size 256 --max-iterations 300000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-mul
+
 python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation sub --input-size 3 --batch-size 10000 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --pod-name nalm-sub
 
 python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation div --input-size 3 --batch-size 100000 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --pod-name nalm-div
@@ -52,10 +54,8 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_log: bool = False,
         use_ste: bool = False,
         use_layer_norm: bool = True,
-        use_attention: bool = True,
-        attn_dim: int = 64,
-        attn_layers: int = 1,
-        dropout_p: float = 0.1,
+        use_extra_layer_norm: bool = True,
+        use_sparsemax_select: bool = True,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
@@ -79,54 +79,50 @@ class DAGLayer(ExtendedTorchModule):
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
         self.use_ste = bool(use_ste)
-        self.use_attention = bool(use_attention)
+        self.use_sparsemax_select = bool(use_sparsemax_select)
 
-        # Normalize inputs and optionally enhance with a small MLP or attention + dropout
+        # Normalize inputs and optionally add extra normalization around structure heads
         self.input_norm = nn.LayerNorm(in_features) if use_layer_norm else None
-        self.act = nn.GELU()
-        self.dropout = nn.Dropout(dropout_p)
+        self.use_extra_layer_norm = bool(use_extra_layer_norm)
+        if self.use_extra_layer_norm:
+            # Applied to the features that feed the heads
+            self.head_norm = nn.LayerNorm(in_features)
+        else:
+            self.head_norm = None
 
-        # Optional self-attention pre-head over tokens with positional embeddings
-        if self.use_attention:
-            self.attn_dim = int(attn_dim)
-            self.attn_layers = int(attn_layers)
-            # Learned positional embeddings for positions [0..in_features-1]
-            self.pos_embed = nn.Parameter(torch.zeros(in_features, self.attn_dim))
-            # Project scalar token -> model dim and back
-            self.token_in = nn.Linear(1, self.attn_dim)
-            self.token_out = nn.Linear(self.attn_dim, 1)
-            # Single-head self-attention blocks
-            self.attn_blocks = nn.ModuleList(
-                [
-                    nn.ModuleDict(
-                        {
-                            "mha": nn.MultiheadAttention(
-                                embed_dim=self.attn_dim,
-                                num_heads=1,
-                                dropout=dropout_p,
-                                batch_first=True,
-                            ),
-                            "ln1": nn.LayerNorm(self.attn_dim),
-                            "ff1": nn.Linear(self.attn_dim, self.attn_dim),
-                            "ff2": nn.Linear(self.attn_dim, self.attn_dim),
-                            "ln2": nn.LayerNorm(self.attn_dim),
-                            "act": nn.GELU(),
-                            "drop": nn.Dropout(dropout_p),
-                        }
-                    )
-                    for _ in range(self.attn_layers)
-                ]
-            )
+        # Extra normalization for per-step logits (O) and gate logits (G)
+        if self.use_extra_layer_norm:
+            self.O_norm = nn.LayerNorm(self.total_nodes)
+            self.G_norm = nn.LayerNorm(self.dag_depth)
+        else:
+            self.O_norm = None
+            self.G_norm = None
 
         # Small prediction heads mapping input -> structure
         # Operand selector matrix O: shape (dag_depth, total_nodes)
         self.O_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
+        # Optional separate heads for signed sparse selection
+        if self.use_sparsemax_select:
+            self.O_pos_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
+            self.O_neg_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
+            # Per-step scale to control overall magnitude
+            self.O_scale = nn.Parameter(torch.ones(self.dag_depth))
+        else:
+            self.O_pos_head = None
+            self.O_neg_head = None
+            self.O_scale = None
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
 
         # Initialize heads similar to standard small heads
         nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.O_head.bias)
+        if self.O_pos_head is not None:
+            nn.init.normal_(self.O_pos_head.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.O_pos_head.bias)
+        if self.O_neg_head is not None:
+            nn.init.normal_(self.O_neg_head.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
 
@@ -139,8 +135,43 @@ class DAGLayer(ExtendedTorchModule):
         # Reinitialize prediction heads
         nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.O_head.bias)
+        if self.O_pos_head is not None:
+            nn.init.normal_(self.O_pos_head.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.O_pos_head.bias)
+        if self.O_neg_head is not None:
+            nn.init.normal_(self.O_neg_head.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
+
+    @staticmethod
+    def _sparsemax(logits: torch.Tensor, dim: int = -1) -> torch.Tensor:
+        """Sparsemax activation along a dimension.
+
+        Projects logits onto the probability simplex with possible exact zeros.
+        Returns nonnegative outputs summing to 1 along 'dim'.
+        """
+        # Shift for numerical stability
+        z = logits - logits.max(dim=dim, keepdim=True).values
+        # Sort in descending order
+        z_sorted, _ = torch.sort(z, descending=True, dim=dim)
+        z_cumsum = torch.cumsum(z_sorted, dim=dim)
+        K = logits.size(dim)
+        # Create 1..K with correct dtype/device and broadcast shape
+        range_k = torch.arange(1, K + 1, device=logits.device, dtype=logits.dtype)
+        # Expand to match dims for broadcasting along 'dim'
+        while range_k.dim() < logits.dim():
+            range_k = range_k.unsqueeze(0)
+        # Determine support size k(z)
+        support = 1 + range_k * z_sorted > z_cumsum
+        k_z = support.sum(dim=dim, keepdim=True)
+        # Compute threshold tau(z)
+        idx = k_z - 1
+        z_threshold = z_cumsum.gather(dim, idx)
+        tau_z = (z_threshold - 1) / k_z.clamp_min(1).to(logits.dtype)
+        # Projection
+        p = torch.clamp(z - tau_z, min=0.0)
+        return p
 
     @staticmethod
     def _ste_round(values: torch.Tensor) -> torch.Tensor:
@@ -207,28 +238,31 @@ class DAGLayer(ExtendedTorchModule):
         head_input = (
             self.input_norm(input) if self.input_norm is not None else input
         )  # (B, in_features)
-        if self.use_attention:
-            # Build token sequence (B, N, D)
-            tokens = input.unsqueeze(-1)  # (B, N, 1)
-            tokens = self.token_in(tokens)  # (B, N, D)
-            tokens = tokens + self.pos_embed.unsqueeze(
-                0
-            )  # add learned positional encodings
-            for blk in self.attn_blocks:
-                # Self-attention + residual + norm
-                resid = tokens
-                attn_out, _ = blk["mha"](tokens, tokens, tokens, need_weights=False)
-                tokens = blk["ln1"](resid + blk["drop"](attn_out))
-                # Feed-forward + residual + norm
-                resid = tokens
-                f = blk["act"](blk["ff1"](tokens))
-                f = blk["drop"](blk["ff2"](f))
-                tokens = blk["ln2"](resid + f)
-            head_input = self.token_out(tokens).squeeze(-1)  # (B, N)
+        if self.head_norm is not None:
+            head_input = self.head_norm(head_input)
 
-        O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
-        O = O_flat.view(B, self.dag_depth, self.total_nodes).to(dtype)
-        G = torch.sigmoid(self.G_head(head_input)).to(dtype)  # (B, dag_depth)
+        if self.use_sparsemax_select:
+            # Separate positive and negative selections via sparsemax
+            O_pos_flat = self.O_pos_head(head_input)
+            O_neg_flat = self.O_neg_head(head_input)
+            O_pos = O_pos_flat.view(B, self.dag_depth, self.total_nodes)
+            O_neg = O_neg_flat.view(B, self.dag_depth, self.total_nodes)
+            O_pos = self._sparsemax(O_pos, dim=-1)
+            O_neg = self._sparsemax(O_neg, dim=-1)
+            O = O_pos - O_neg
+            if self.O_scale is not None:
+                O = O * self.O_scale.view(1, self.dag_depth, 1)
+            O = O.to(dtype)
+        else:
+            O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
+            O = O_flat.view(B, self.dag_depth, self.total_nodes)
+            if self.O_norm is not None:
+                O = self.O_norm(O)
+            O = O.to(dtype)
+        G_logits = self.G_head(head_input)  # (B, dag_depth)
+        if self.G_norm is not None:
+            G_logits = self.G_norm(G_logits)
+        G = torch.sigmoid(G_logits).to(dtype)
 
         # Optionally freeze G to linear domain (G==1)
         if self.freeze_g_linear:
@@ -246,7 +280,8 @@ class DAGLayer(ExtendedTorchModule):
                 G = G_hard + (G - G.detach())
             else:
                 # Train with continuous bounded coefficients (no rounding)
-                O = torch.tanh(O)
+                if not self.use_sparsemax_select:
+                    O = torch.tanh(O)
         else:
             # Eval: use hard forward for O and G
             O = torch.round(O)
