@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import numpy as np
 import torch
-from runpod_service import stop_runpod
+from runpod_service.runpod_service import stop_runpod
 
 import misc.utils as utils
 import stable_nalu
@@ -546,60 +546,7 @@ def get_npu_Wr_init_writer_value():
         raise ValueError(f"Invalid arg ({args.npu_Wr_init}) given for npu_Wr_init")
 
 
-# Prepear logging
-# summary_writer = stable_nalu.writer.DummySummaryWriter()
-summary_writer = stable_nalu.writer.SummaryWriter(
-    f"{args.name_prefix}/{args.layer_type.lower()}"
-    # f'{"-nac-" if args.nac_mul != "none" else ""}'
-    # f'{"n" if args.nac_mul == "normal" else ""}'
-    # f'{"s" if args.nac_mul == "safe" else ""}'
-    # f'{"s" if args.nac_mul == "max-safe" else ""}'
-    # f'{"t" if args.nac_mul == "trig" else ""}'
-    # f'{"m" if args.nac_mul == "mnac" else ""}'
-    # f'{"npu" if args.nac_mul == "npu" else ""}'
-    # f'{"npur" if args.nac_mul == "real-npu" else ""}'
-    # f'{"-nalu-" if (args.nalu_bias or args.nalu_two_nac or args.nalu_two_gate or args.nalu_mul != "normal" or args.nalu_gate != "normal") else ""}'
-    f'{"-gr" if args.nac_weight == "golden-ratio" and (args.layer_type == "NALU" or args.layer_type == "NAC") else ""}'
-    f'{"-b" if args.nalu_bias and args.layer_type == "NALU" else ""}'
-    f'{"-2n" if args.nalu_two_nac and args.layer_type == "NALU" else ""}'
-    f'{"-2g" if args.nalu_two_gate and args.layer_type == "NALU" else ""}'
-    f'{"-s" if args.nalu_mul == "safe" and args.layer_type == "NALU" else ""}'
-    f'{"-s" if args.nalu_mul == "max-safe" and args.layer_type == "NALU" else ""}'
-    f'{"-t" if args.nalu_mul == "trig" and args.layer_type == "NALU" else ""}'
-    f'{"-m" if args.nalu_mul == "mnac" and args.layer_type == "NALU" else ""}'
-    f'{"-r" if args.nalu_gate == "regualized" and args.layer_type == "NALU" else ""}'
-    f'{"-u" if args.nalu_gate == "gumbel" and args.layer_type == "NALU" else ""}'
-    f'{"-uu" if args.nalu_gate == "obs-gumbel" and args.layer_type == "NALU" else ""}'
-    f'{"-sS" if args.nru_div_mode == "div-sepSign" and args.layer_type == "NRU" else ""}'
-    f"_op-{args.operation.lower()}"
-    f'_oob-{"c" if args.oob_mode == "clip" else "r"}'
-    f"_rs-{args.regualizer_scaling}-{args.regualizer_shape}"
-    f"_eps-{args.mnac_epsilon}"
-    f"_rl-{args.regualizer_scaling_start}-{args.regualizer_scaling_end}"
-    f"_r-{args.regualizer}-{args.regualizer_z}-{args.regualizer_oob}"
-    f"_i-{args.interpolation_range[0]}-{args.interpolation_range[1]}"
-    f"_e-{args.extrapolation_range[0]}-{args.extrapolation_range[1]}"
-    f'_z-{"simple" if args.simple else f"{args.input_size}-{args.subset_ratio}-{args.overlap_ratio}"}'
-    f"_b{args.batch_size}"
-    f"_s{args.seed}"
-    f"_h{args.hidden_size}"
-    f"_z{args.num_subsets}"
-    f'_lr-{args.optimizer}-{"%.5f" % args.learning_rate}-{args.momentum}'
-    f'_L1{"T" if args.regualizer_l1 else f"F"}'
-    f"_rb-{args.regualizer_beta_start}-{args.regualizer_beta_end}-{args.regualizer_beta_step}-{args.regualizer_beta_growth}"
-    f"_rWnpu-{args.regualizer_npu_w}-{args.realnpu_reg_type[0]}"
-    f"_rg-{args.regualizer_gate}"
-    f'_r{"H" if args.reg_scale_type == "heim" else f"M"}'
-    f'_clip-{args.npu_clip if args.npu_clip != "none" else args.npu_clip[0]}'
-    f"_WrI-{get_npu_Wr_init_writer_value()}"
-    # f'_p-{args.pytorch_precision}'
-    f'_gn-{args.clip_grad_norm if args.clip_grad_norm != None else f"F"}'
-    f'_gv-{args.clip_grad_value if args.clip_grad_value != None else f"F"}'
-    f"_r{str(args.reinit)[0]}-{args.reinit_epoch_interval}-{args.reinit_max_stored_losses}"
-    f"_id{args.id}",
-    #    f'_TB-{args.log_interval}',
-    remove_existing_data=args.remove_existing_data,
-)
+summary_writer = stable_nalu.writer.DummySummaryWriter()
 
 # Set threads
 if "LSB_DJOB_NUMPROC" in os.environ:
@@ -711,7 +658,7 @@ def test_model(data):
 # Train model
 print(model)
 print("")
-print(summary_writer.name)
+print("no-tb-writer")
 print("")
 # only print inits of small models
 utils.print_model_params(model) if args.input_size <= 10 else None
@@ -732,7 +679,7 @@ r_l1_scale = args.regualizer_beta_start
 """Resuming previous training"""
 resume_epoch = 0
 if args.load_checkpoint:
-    resume_epoch = stable_nalu.writer.load_model(summary_writer.name, model, optimizer)
+    resume_epoch = stable_nalu.writer.load_model("no-tb-writer", model, optimizer)
     if resume_epoch > args.max_iterations:
         raise ValueError(
             f"{args.max_iterations} must be larger than or equal to the loaded models resume epoch {resume_epoch}"
@@ -768,9 +715,6 @@ for epoch_i, (x_train, t_train) in zip(
     if epoch_i % args.log_interval == 0:
         interpolation_error = test_model(dataset_valid_interpolation_data)
         extrapolation_error = test_model(dataset_test_extrapolation_data)
-
-        summary_writer.add_scalar("metric/valid/interpolation", interpolation_error)
-        summary_writer.add_scalar("metric/test/extrapolation", extrapolation_error)
 
         # Optional: flip DAG layers to STE once interpolation < 1.0 to harden structure
         if float(interpolation_error) < 0.1:
@@ -808,8 +752,6 @@ for epoch_i, (x_train, t_train) in zip(
     l1_loss = 0
     if args.regualizer_l1:
         l1_loss = Regualizer.l1(model.parameters())
-        if args.verbose:
-            summary_writer.add_scalar("L1/train/L1-loss", l1_loss)
 
     if use_npu_scaling:
         # the beta_start value will be updated accordingly to be the correct beta value for the epoch.
@@ -826,7 +768,6 @@ for epoch_i, (x_train, t_train) in zip(
         r_l1_scale = float(
             args.regualizer_beta_start
         )  # Decimal doesn't work for tensorboard or mixed fp arithmetic
-        summary_writer.add_scalar("L1/train/beta", r_l1_scale)
 
     # mse loss
     loss_train_criterion = criterion(y_train, t_train)
@@ -854,9 +795,7 @@ for epoch_i, (x_train, t_train) in zip(
 
     # Log the loss
     if args.verbose or epoch_i % args.log_interval == 0:
-        summary_writer.add_scalar("loss/train/critation", loss_train_criterion)
-        summary_writer.add_scalar("loss/train/regualizer", loss_train_regualizer)
-        summary_writer.add_scalar("loss/train/total", loss_train)
+        pass
     log_dict = {
         "loss/train": float(loss_train_criterion.detach().cpu().item()),
         "mse/inter": float(interpolation_error.detach().cpu().item()),
@@ -908,9 +847,6 @@ for epoch_i, (x_train, t_train) in zip(
             ) and (np.mean(losses_last_half) > args.reinit_loss_thr):
                 model.reset_parameters()
                 print(f"reinit number {reinit_counter}")
-                summary_writer._root.writer.add_text(
-                    f"reinit", str(reinit_counter), epoch_i
-                )
                 epoch_losses = []
                 reinit_counter += 1
 
