@@ -12,6 +12,8 @@ python3 experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --opera
 
 python3 experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation mul --input-size 3 --batch-size 256 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0
 
+python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation mul --input-size 3 --batch-size 256 --max-iterations 300000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-mul
+
 Things to try (on cloud):
 
 python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation mul --input-size 100 --batch-size 256 --max-iterations 300000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-mul

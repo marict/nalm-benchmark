@@ -779,6 +779,12 @@ for epoch_i, (x_train, t_train) in zip(
                     if module.use_ste is False:
                         module.use_ste = True
                         print(f"Flipped {module.__class__.__name__} to use_ste")
+        # Flip back to non-STE if interpolation degrades above a higher threshold (hysteresis)
+        elif float(interpolation_error) > 0.2:
+            for module in model.modules():
+                if "use_ste" in module.__dict__ and module.use_ste is True:
+                    module.use_ste = False
+                    print(f"Flipped {module.__class__.__name__} back to non-STE")
 
     # forward
     y_train = model(x_train)
