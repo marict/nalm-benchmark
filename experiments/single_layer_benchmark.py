@@ -12,6 +12,7 @@ import misc.utils as utils
 import stable_nalu
 import stable_nalu.functional.regualizer as Regualizer
 import wandb
+from stable_nalu.layer.dag import DAGLayer
 
 wandb.init()
 print(
@@ -842,25 +843,30 @@ for epoch_i, (x_train, t_train) in zip(
     )
 
     loss_train = loss_train_criterion + loss_train_regualizer
+    dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
 
     # Log the loss
     if args.verbose or epoch_i % args.log_interval == 0:
         summary_writer.add_scalar("loss/train/critation", loss_train_criterion)
         summary_writer.add_scalar("loss/train/regualizer", loss_train_regualizer)
         summary_writer.add_scalar("loss/train/total", loss_train)
-        wandb.log(
-            {
-                "loss/train": float(loss_train_criterion.detach().cpu().item()),
-                "mse/inter": float(interpolation_error.detach().cpu().item()),
-                "mse/extra": float(extrapolation_error.detach().cpu().item()),
-            },
-            step=epoch_i,
+    log_dict = {
+        "loss/train": float(loss_train_criterion.detach().cpu().item()),
+        "mse/inter": float(interpolation_error.detach().cpu().item()),
+        "mse/extra": float(extrapolation_error.detach().cpu().item()),
+    }
+    if dag is not None:
+        log_dict["mean/G"] = float(dag._last_G.cpu().numpy().mean())
+        o_l1_mean = float(
+            dag._last_O.cpu().abs().sum(dim=-1).mean().detach().cpu().item()
         )
+        log_dict["mean/O"] = o_l1_mean
     if epoch_i % args.log_interval == 0:
         print(
             "train %d: %.5f, inter: %.5f, extra: %.5f"
             % (epoch_i, loss_train_criterion, interpolation_error, extrapolation_error)
         )
+        wandb.log(log_dict, step=epoch_i)
 
     # Optimize model
     if loss_train.requires_grad:

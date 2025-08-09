@@ -288,6 +288,10 @@ class DAGLayer(ExtendedTorchModule):
             O = torch.clamp(O, -1.0, 1.0)
             G = (G > 0.5).to(G.dtype)
 
+        # Expose selector tensors for external logging to avoid recomputation elsewhere
+        self._last_G = G.detach()
+        self._last_O = O.detach()
+
         # Prepare working tensors: start with initial nodes, append one per step
         working_mag = torch.zeros(B, self.total_nodes, dtype=dtype, device=device)
         working_sign = torch.zeros(B, self.total_nodes, dtype=dtype, device=device)
