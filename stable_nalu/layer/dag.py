@@ -96,10 +96,8 @@ class DAGLayer(ExtendedTorchModule):
         # Extra normalization for per-step logits (O) and gate logits (G)
         if self.use_extra_layer_norm:
             self.O_norm = nn.LayerNorm(self.total_nodes)
-            self.G_norm = nn.LayerNorm(self.dag_depth)
         else:
             self.O_norm = None
-            self.G_norm = None
 
         # Small prediction heads mapping input -> structure
         # Operand selector matrix O: shape (dag_depth, total_nodes)
@@ -267,8 +265,6 @@ class DAGLayer(ExtendedTorchModule):
                 O = self.O_norm(O)
             O = O.to(dtype)
         G_logits = self.G_head(head_input)  # (B, dag_depth)
-        if self.G_norm is not None:
-            G_logits = self.G_norm(G_logits)
         G = torch.sigmoid(G_logits).to(dtype)
 
         # Optionally freeze G to linear domain (G==1)
