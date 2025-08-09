@@ -14,15 +14,10 @@ python3 experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --opera
 
 python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation mul --input-size 3 --batch-size 256 --max-iterations 300000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-mul
 
-python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation div --input-size 3 --batch-size 256 --max-iterations 300000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-div
+python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation div --input-size 3 --batch-size 256 --max-iterations 10000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-div
 
 Things to try (on cloud):
 
-python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation mul --input-size 100 --batch-size 256 --max-iterations 300000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-mul
-
-python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation sub --input-size 3 --batch-size 10000 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --pod-name nalm-sub
-
-python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation div --input-size 3 --batch-size 100000 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --pod-name nalm-div
 
 
 """
