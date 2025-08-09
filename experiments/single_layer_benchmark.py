@@ -813,7 +813,7 @@ for epoch_i, (x_train, t_train) in zip(
         )
         # Inspect gate trajectory on the first sample across steps
         if dag is not None and hasattr(dag, "_last_G"):
-            x0 = float(x_train[0].detach().cpu().view(-1)[0].item())
+            x0 = float(x_train[0].detach().cpu().view(-1))
             y0 = float(y_train[0].detach().cpu().view(-1)[0].item())
             t0 = float(t_train[0].detach().cpu().view(-1)[0].item())
             g_first = dag._last_G[0].detach().cpu().tolist()
