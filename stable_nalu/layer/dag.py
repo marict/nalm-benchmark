@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn as nn
 
@@ -126,6 +128,8 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
+        with torch.no_grad():
+            self.G_head.bias.fill_(math.log(0.7 / 0.3))  # ≈ 0.8473
 
         # Numerical guards
         self._mag_min = 1e-6
@@ -144,6 +148,8 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
+        with torch.no_grad():
+            self.G_head.bias.fill_(math.log(0.7 / 0.3))  # ≈ 0.8473
 
     @staticmethod
     def _sparsemax(logits: torch.Tensor, dim: int = -1) -> torch.Tensor:
