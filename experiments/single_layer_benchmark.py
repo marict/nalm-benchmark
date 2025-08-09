@@ -398,13 +398,6 @@ parser.add_argument(
     type=int,
     help="Log to tensorboard every X epochs.",
 )
-parser.add_argument(
-    "--grad-noise-coeff",
-    action="store",
-    default=0.0,
-    type=float,
-    help="Scale for gradient noise injected into DAG selector heads; actual sigma = coeff * last interpolation MSE.",
-)
 
 parser.add_argument(
     "--clip-grad-norm",
@@ -818,30 +811,15 @@ for epoch_i, (x_train, t_train) in zip(
             "train %d: %.5f, inter: %.5f, extra: %.5f"
             % (epoch_i, loss_train_criterion, interpolation_error, extrapolation_error)
         )
+        # Inspect gate trajectory on the first sample across steps
+        if dag is not None and hasattr(dag, "_last_G"):
+            g_first = dag._last_G[0].detach().cpu().tolist()
+            print(f"G_first_sample: {g_first}")
         wandb.log(log_dict, step=epoch_i)
 
     # Optimize model
     if loss_train.requires_grad:
         loss_train.backward()
-        # Inject gradient noise into DAG selector heads (scaled by interpolation error)
-        if args.grad_noise_coeff and args.grad_noise_coeff > 0:
-            dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
-            if dag is not None:
-                sigma = (
-                    float(interpolation_error.detach().cpu().item())
-                    * args.grad_noise_coeff
-                )
-                if sigma > 0:
-                    heads = []
-                    if getattr(dag, "O_pos_head", None) is not None:
-                        heads += [dag.O_pos_head, dag.O_neg_head]
-                    else:
-                        heads += [dag.O_head]
-                    heads += [dag.G_head]
-                    for h in heads:
-                        for p in h.parameters():
-                            if p.grad is not None:
-                                p.grad.add_(torch.randn_like(p.grad) * sigma)
         if args.clip_grad_norm != None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
         if args.clip_grad_value != None:
