@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import numpy as np
 import torch
-from runpod_service.runpod_service import stop_runpod
+from runpod_service import stop_runpod
 
 import misc.utils as utils
 import stable_nalu
