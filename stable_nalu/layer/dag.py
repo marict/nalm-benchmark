@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ..abstract import ExtendedTorchModule
 
@@ -52,7 +51,8 @@ class DAGLayer(ExtendedTorchModule):
         dag_depth: int | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        use_ste: bool = False,
+        use_ste_O: bool = False,
+        use_ste_G: bool = True,  # Always on
         use_layer_norm: bool = True,
         use_extra_layer_norm: bool = True,
         use_sparsemax_select: bool = True,
@@ -78,7 +78,8 @@ class DAGLayer(ExtendedTorchModule):
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
-        self.use_ste = bool(use_ste)
+        self.use_ste_O = bool(use_ste_O)
+        self.use_ste_G = bool(use_ste_G)
         self.use_sparsemax_select = bool(use_sparsemax_select)
 
         # Normalize inputs and optionally add extra normalization around structure heads
@@ -90,11 +91,13 @@ class DAGLayer(ExtendedTorchModule):
         else:
             self.head_norm = None
 
-        # Extra normalization for per-step logits (O). G_norm is disabled per design
+        # Extra normalization for per-step logits (O) and gate logits (G)
         if self.use_extra_layer_norm:
             self.O_norm = nn.LayerNorm(self.total_nodes)
+            self.G_norm = nn.LayerNorm(self.dag_depth)
         else:
             self.O_norm = None
+            self.G_norm = None
 
         # Small prediction heads mapping input -> structure
         # Operand selector matrix O: shape (dag_depth, total_nodes)
@@ -111,8 +114,6 @@ class DAGLayer(ExtendedTorchModule):
             self.O_scale = None
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
-        # Learnable positive scale applied to G logits (per-step)
-        self.G_scale_raw = nn.Parameter(torch.zeros(self.dag_depth))
 
         # Initialize heads similar to standard small heads
         nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
@@ -125,9 +126,6 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
-        # Initialize G scale to a moderate sharpness (s≈2)
-        with torch.no_grad():
-            self.G_scale_raw.fill_(torch.log(torch.exp(torch.tensor(2.0)) - 1.0))
 
         # Numerical guards
         self._mag_min = 1e-6
@@ -263,9 +261,8 @@ class DAGLayer(ExtendedTorchModule):
                 O = self.O_norm(O)
             O = O.to(dtype)
         G_logits = self.G_head(head_input)  # (B, dag_depth)
-        # Apply learnable sharpness scale to drive commitment away from 0.5
-        G_scale = F.softplus(self.G_scale_raw).to(G_logits.dtype) + 1e-6
-        G_logits = G_logits * G_scale.view(1, -1)
+        if self.G_norm is not None:
+            G_logits = self.G_norm(G_logits)
         G = torch.sigmoid(G_logits).to(dtype)
 
         # Optionally freeze G to linear domain (G==1)
@@ -276,14 +273,13 @@ class DAGLayer(ExtendedTorchModule):
 
         # Optional STE discretisation in training for stability/inductive bias
         if self.training:
-            if self.use_ste:
-                # Discrete gate via straight-through
+            if self.use_ste_G:
                 G_hard = (G > 0.5).to(G.dtype)
                 G = G_hard + (G - G.detach())
-                # Discrete operand selection via straight-through
+            if self.use_ste_O:
                 O = self._ste_round(O).clamp(-1.0, 1.0)
             else:
-                # Train with continuous bounded coefficients (no rounding for sparsemax)
+                # Train with continuous bounded coefficients (no rounding)
                 if not self.use_sparsemax_select:
                     O = torch.tanh(O)
         else:
