@@ -813,8 +813,11 @@ for epoch_i, (x_train, t_train) in zip(
         )
         # Inspect gate trajectory on the first sample across steps
         if dag is not None and hasattr(dag, "_last_G"):
+            v0 = float(y_train[0].detach().cpu().view(-1)[0].item())
+            t0 = float(t_train[0].detach().cpu().view(-1)[0].item())
             g_first = dag._last_G[0].detach().cpu().tolist()
             o_first = dag._last_O[0].detach().cpu().tolist()
+            print(f"v0={v0:.6f} t0={t0:.6f}")
             print(f"G_first_sample: {g_first}")
             print(f"O_first_sample: {o_first}")
         wandb.log(log_dict, step=epoch_i)

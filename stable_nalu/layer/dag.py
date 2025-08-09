@@ -141,7 +141,7 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
- 
+
     @staticmethod
     def _sparsemax(logits: torch.Tensor, dim: int = -1) -> torch.Tensor:
         """Sparsemax activation along a dimension.
