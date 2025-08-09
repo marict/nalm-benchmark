@@ -52,7 +52,7 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
         use_ste_O: bool = False,
-        use_ste_G: bool = True,  # Always on
+        use_ste_G: bool = False,  # Always on
         use_layer_norm: bool = True,
         use_extra_layer_norm: bool = True,
         use_sparsemax_select: bool = True,
