@@ -56,7 +56,7 @@ class DAGLayer(ExtendedTorchModule):
         use_ste_G: bool = True,  # Always on
         use_layer_norm: bool = True,
         use_extra_layer_norm: bool = True,
-        use_sparsemax_select: bool = False,
+        use_sparsemax_select: bool = True,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
