@@ -23,8 +23,6 @@ python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single
 
 Things to try (on cloud):
 
-
-
 """
 
 
