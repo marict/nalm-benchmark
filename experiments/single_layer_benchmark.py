@@ -856,10 +856,8 @@ for epoch_i, (x_train, t_train) in zip(
         "mse/extra": float(extrapolation_error.detach().cpu().item()),
     }
     if dag is not None:
-        log_dict["mean/G"] = float(dag._last_G.cpu().numpy().mean())
-        o_l1_mean = float(
-            dag._last_O.cpu().abs().sum(dim=-1).mean().detach().cpu().item()
-        )
+        log_dict["mean/G"] = float(dag._last_G.cpu().mean().item())
+        o_l1_mean = float(dag._last_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
     if epoch_i % args.log_interval == 0:
         print(
