@@ -109,12 +109,10 @@ class DAGLayer(ExtendedTorchModule):
         if self.use_sparsemax_select:
             self.O_pos_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
             self.O_neg_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
-            # Per-step scale to control overall magnitude
-            self.O_scale = nn.Parameter(torch.ones(self.dag_depth))
         else:
             self.O_pos_head = None
             self.O_neg_head = None
-            self.O_scale = None
+        self.O_scale = None  # removed scaling to avoid magnitude hacks in linear domain
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
 
@@ -258,8 +256,6 @@ class DAGLayer(ExtendedTorchModule):
             O_pos = self._sparsemax(O_pos, dim=-1)
             O_neg = self._sparsemax(O_neg, dim=-1)
             O = O_pos - O_neg
-            if self.O_scale is not None:
-                O = O * self.O_scale.view(1, self.dag_depth, 1)
             O = O.to(dtype)
         else:
             O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
