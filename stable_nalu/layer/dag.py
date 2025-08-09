@@ -52,7 +52,7 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
         use_ste_O: bool = False,
-        use_ste_G: bool = False,  # Always on
+        use_ste_G: bool = True,  # Always on
         use_layer_norm: bool = True,
         use_extra_layer_norm: bool = True,
         use_sparsemax_select: bool = True,
@@ -261,8 +261,8 @@ class DAGLayer(ExtendedTorchModule):
                 O = self.O_norm(O)
             O = O.to(dtype)
         G_logits = self.G_head(head_input)  # (B, dag_depth)
-        if self.G_norm is not None:
-            G_logits = self.G_norm(G_logits)
+        # if self.G_norm is not None:
+        #     G_logits = self.G_norm(G_logits)
         G = torch.sigmoid(G_logits).to(dtype)
 
         # Optionally freeze G to linear domain (G==1)
