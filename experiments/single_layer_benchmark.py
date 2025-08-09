@@ -7,6 +7,7 @@ from decimal import Decimal
 
 import numpy as np
 import torch
+from runpod_service import stop_runpod
 
 import misc.utils as utils
 import stable_nalu
@@ -775,16 +776,16 @@ for epoch_i, (x_train, t_train) in zip(
         if float(interpolation_error) < 0.1:
             flipped_any = False
             for module in model.modules():
-                if "use_ste" in module.__dict__:
-                    if module.use_ste is False:
-                        module.use_ste = True
-                        print(f"Flipped {module.__class__.__name__} to use_ste")
+                if "use_ste_O" in module.__dict__:
+                    if module.use_ste_O is False:
+                        module.use_ste_O = True
+                        print(f"Flipped {module.__class__.__name__} to use_ste_O")
         # Flip back to non-STE if interpolation degrades above a higher threshold (hysteresis)
         elif float(interpolation_error) > 0.2:
             for module in model.modules():
-                if "use_ste" in module.__dict__ and module.use_ste is True:
-                    module.use_ste = False
-                    print(f"Flipped {module.__class__.__name__} back to non-STE")
+                if "use_ste_O" in module.__dict__ and module.use_ste_O is True:
+                    module.use_ste_O = False
+                    print(f"Flipped {module.__class__.__name__} back to non-STE_O")
 
     # forward
     y_train = model(x_train)
@@ -928,6 +929,8 @@ print(f"  - loss_valid_inter: {loss_valid_inter}")
 print(f"  - loss_valid_extra: {loss_valid_extra}")
 print()
 utils.print_model_params(model)
+
+stop_runpod()
 
 
 if not args.no_save:

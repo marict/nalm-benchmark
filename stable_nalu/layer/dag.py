@@ -56,7 +56,8 @@ class DAGLayer(ExtendedTorchModule):
         dag_depth: int | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        use_ste: bool = False,
+        use_ste_O: bool = False,
+        use_ste_G: bool = True,  # Always on
         use_layer_norm: bool = True,
         use_extra_layer_norm: bool = True,
         use_sparsemax_select: bool = True,
@@ -82,7 +83,8 @@ class DAGLayer(ExtendedTorchModule):
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
-        self.use_ste = bool(use_ste)
+        self.use_ste_O = bool(use_ste_O)
+        self.use_ste_G = bool(use_ste_G)
         self.use_sparsemax_select = bool(use_sparsemax_select)
 
         # Normalize inputs and optionally add extra normalization around structure heads
@@ -276,20 +278,18 @@ class DAGLayer(ExtendedTorchModule):
 
         # Optional STE discretisation in training for stability/inductive bias
         if self.training:
-            if self.use_ste:
-                O = self._ste_round(O)
-                # Hard bound O to represent inclusion/exclusion/sign only
-                O = torch.clamp(O, -1.0, 1.0)
+            if self.use_ste_G:
                 G_hard = (G > 0.5).to(G.dtype)
                 G = G_hard + (G - G.detach())
+            if self.use_ste_O:
+                O = self._ste_round(O).clamp(-1.0, 1.0)
             else:
                 # Train with continuous bounded coefficients (no rounding)
                 if not self.use_sparsemax_select:
                     O = torch.tanh(O)
         else:
             # Eval: use hard forward for O and G
-            O = torch.round(O)
-            O = torch.clamp(O, -1.0, 1.0)
+            O = torch.round(O).clamp(-1.0, 1.0)
             G = (G > 0.5).to(G.dtype)
 
         # Expose selector tensors for external logging to avoid recomputation elsewhere
