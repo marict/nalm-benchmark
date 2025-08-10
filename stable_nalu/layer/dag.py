@@ -53,13 +53,9 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
         use_ste_O: bool = False,
+        flip_ste_O: bool = False,
         use_ste_G: bool = True,  # Always on
-        use_layer_norm: bool = True,
-        use_extra_layer_norm: bool = True,
-        use_sparsemax_select: bool = False,
-        use_entmax_select: bool = True,
-        entmax_alpha: float = 1.5,
-        use_topk2_projection: bool = False,
+        selector_tau: float = 1.0,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
@@ -83,37 +79,18 @@ class DAGLayer(ExtendedTorchModule):
         self.freeze_g_log = bool(freeze_g_log)
         self.use_ste_O = bool(use_ste_O)
         self.use_ste_G = bool(use_ste_G)
-        self.use_sparsemax_select = bool(use_sparsemax_select)
-        self.use_entmax_select = bool(use_entmax_select)
-        self.entmax_alpha = float(entmax_alpha)
-        self.use_topk2_projection = bool(use_topk2_projection)
+        self.selector_tau = float(selector_tau)
+        self.flip_ste_O = bool(flip_ste_O)
 
-        # Normalize inputs and optionally add extra normalization around structure heads
-        self.input_norm = nn.LayerNorm(in_features) if use_layer_norm else None
-        self.use_extra_layer_norm = bool(use_extra_layer_norm)
-        if self.use_extra_layer_norm:
-            # Applied to the features that feed the heads
-            self.head_norm = nn.LayerNorm(in_features)
-        else:
-            self.head_norm = None
+        # Always-on normalizations for stability
+        self.input_norm = nn.LayerNorm(in_features)
+        self.head_norm = nn.LayerNorm(in_features)
+        self.O_norm = nn.LayerNorm(self.total_nodes)
 
-        # Extra normalization for per-step logits (O) and gate logits (G)
-        if self.use_extra_layer_norm:
-            self.O_norm = nn.LayerNorm(self.total_nodes)
-        else:
-            self.O_norm = None
-
-        # Small prediction heads mapping input -> structure
-        # Operand selector matrix O: shape (dag_depth, total_nodes)
+        # Small prediction head mapping input -> selector logits
         self.O_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
-        # Optional separate heads for signed sparse selection
-        if self.use_sparsemax_select or self.use_entmax_select:
-            self.O_pos_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
-            self.O_neg_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
-        else:
-            self.O_pos_head = None
-            self.O_neg_head = None
-        self.O_scale = None  # removed scaling to avoid magnitude hacks in linear domain
+        self.O_pos_head = None
+        self.O_neg_head = None
 
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
@@ -121,12 +98,7 @@ class DAGLayer(ExtendedTorchModule):
         # Initialize heads similar to standard small heads
         nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.O_head.bias)
-        if self.O_pos_head is not None:
-            nn.init.normal_(self.O_pos_head.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.O_pos_head.bias)
-        if self.O_neg_head is not None:
-            nn.init.normal_(self.O_neg_head.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.O_neg_head.bias)
+        # no extra heads
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
 
@@ -148,76 +120,7 @@ class DAGLayer(ExtendedTorchModule):
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
 
-    @staticmethod
-    def _sparsemax(logits: torch.Tensor, dim: int = -1) -> torch.Tensor:
-        """Sparsemax activation along a dimension.
-
-        Projects logits onto the probability simplex with possible exact zeros.
-        Returns nonnegative outputs summing to 1 along 'dim'.
-        """
-        # Shift for numerical stability
-        z = logits - logits.max(dim=dim, keepdim=True).values
-        # Sort in descending order
-        z_sorted, _ = torch.sort(z, descending=True, dim=dim)
-        z_cumsum = torch.cumsum(z_sorted, dim=dim)
-        K = logits.size(dim)
-        # Create 1..K with correct dtype/device and broadcast shape
-        range_k = torch.arange(1, K + 1, device=logits.device, dtype=logits.dtype)
-        # Expand to match dims for broadcasting along 'dim'
-        while range_k.dim() < logits.dim():
-            range_k = range_k.unsqueeze(0)
-        # Determine support size k(z)
-        support = 1 + range_k * z_sorted > z_cumsum
-        k_z = support.sum(dim=dim, keepdim=True)
-        # Compute threshold tau(z)
-        idx = k_z - 1
-        z_threshold = z_cumsum.gather(dim, idx)
-        tau_z = (z_threshold - 1) / k_z.clamp_min(1).to(logits.dtype)
-        # Projection
-        p = torch.clamp(z - tau_z, min=0.0)
-        return p
-
-    @staticmethod
-    def _entmax(
-        logits: torch.Tensor, alpha: float = 1.5, dim: int = -1, n_iter: int = 50
-    ) -> torch.Tensor:
-        """Entmax mapping with parameter alpha in (1, 2].
-
-        Uses bisection to find the threshold tau such that
-        sum(((alpha-1)*z - tau)_+^{1/(alpha-1)}) = 1.
-        Returns a probability vector (nonnegative, sums to 1) that can be sparse.
-        """
-        if alpha <= 1.0 or alpha > 2.0:
-            raise ValueError("entmax alpha must be in (1, 2]")
-
-        # Shift for numerical stability
-        z = logits - logits.max(dim=dim, keepdim=True).values
-        d = z.size(dim)
-
-        # Lower/upper bounds for tau
-        tau_lo = z.min(dim=dim, keepdim=True).values - 1.0
-        tau_hi = z.max(dim=dim, keepdim=True).values - 1e-12
-
-        def phi(tau: torch.Tensor) -> torch.Tensor:
-            # Compute sum of powered positives for a given tau
-            u = torch.clamp((alpha - 1.0) * z - tau, min=0.0)
-            return torch.sum(u.pow(1.0 / (alpha - 1.0)), dim=dim, keepdim=True)
-
-        # Bisection
-        for _ in range(n_iter):
-            tau_m = (tau_lo + tau_hi) * 0.5
-            f_m = phi(tau_m)
-            go_right = f_m > 1.0
-            tau_lo = torch.where(go_right, tau_m, tau_lo)
-            tau_hi = torch.where(go_right, tau_hi, tau_m)
-
-        tau_star = tau_hi
-        u = torch.clamp((alpha - 1.0) * z - tau_star, min=0.0)
-        p = u.pow(1.0 / (alpha - 1.0))
-        # Normalize for numerical accuracy
-        p_sum = p.sum(dim=dim, keepdim=True) + 1e-12
-        p = p / p_sum
-        return p
+    # Legacy mappings removed in simplified path
 
     @staticmethod
     def _ste_round(values: torch.Tensor) -> torch.Tensor:
@@ -287,38 +190,16 @@ class DAGLayer(ExtendedTorchModule):
         if self.head_norm is not None:
             head_input = self.head_norm(head_input)
 
-        if self.use_sparsemax_select or self.use_entmax_select:
-            # Separate positive and negative selections via sparsemax
-            O_pos_flat = self.O_pos_head(head_input)
-            O_neg_flat = self.O_neg_head(head_input)
-            O_pos = O_pos_flat.view(B, self.dag_depth, self.total_nodes)
-            O_neg = O_neg_flat.view(B, self.dag_depth, self.total_nodes)
-            if self.use_entmax_select:
-                O_pos = self._entmax(O_pos, alpha=self.entmax_alpha, dim=-1)
-                O_neg = self._entmax(O_neg, alpha=self.entmax_alpha, dim=-1)
-            else:
-                O_pos = self._sparsemax(O_pos, dim=-1)
-                O_neg = self._sparsemax(O_neg, dim=-1)
-            O = O_pos - O_neg
-            O = O.to(dtype)
-        else:
-            O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
-            O = O_flat.view(B, self.dag_depth, self.total_nodes)
-            if self.O_norm is not None:
-                O = self.O_norm(O)
-            O = O.to(dtype)
-
-        # Optional: top-k=2 signed projection per step (straight-through)
-        if self.use_topk2_projection:
-            # Keep gradients via straight-through estimator
-            O_pre = O
-            k = 2 if self.total_nodes >= 2 else 1
-            topk = torch.topk(O_pre.abs(), k=k, dim=-1)
-            idx = topk.indices
-            signs = torch.sign(O_pre.gather(-1, idx))
-            O_hard = torch.zeros_like(O_pre)
-            O_hard = O_hard.scatter(-1, idx, signs)
-            O = O_hard + (O_pre - O_pre.detach())
+        # Soft selector with temperature; O in [-1,1]
+        O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
+        L = O_flat.view(B, self.dag_depth, self.total_nodes)
+        if self.O_norm is not None:
+            L = self.O_norm(L)
+        L = L.to(dtype)
+        tau = self.selector_tau if self.selector_tau > 0 else 1.0
+        sign = torch.tanh(L / tau)
+        mag = torch.sigmoid(torch.abs(L) / tau)
+        O = sign * mag
         G_logits = self.G_head(head_input)  # (B, dag_depth)
         G = torch.sigmoid(G_logits).to(dtype)
 
@@ -329,20 +210,23 @@ class DAGLayer(ExtendedTorchModule):
             G = torch.zeros_like(G)
 
         # Optional STE discretisation in training for stability/inductive bias
-        if self.training:
-            if self.use_ste_G:
-                G_hard = (G > 0.5).to(G.dtype)
-                G = G_hard + (G - G.detach())
-            if self.use_ste_O:
-                O = self._ste_round(O).clamp(-1.0, 1.0)
-            else:
-                # Train with continuous bounded coefficients (no rounding)
-                if not self.use_sparsemax_select:
-                    O = torch.tanh(O)
-        else:
-            # Eval: use hard forward for O and G
-            O = torch.round(O).clamp(-1.0, 1.0)
-            G = (G > 0.5).to(G.dtype)
+        if self.use_ste_G:
+            G_hard = (G > 0.5).to(G.dtype)
+            G = G_hard + (G - G.detach())
+        if self.flip_ste_O and self.use_ste_O:
+            # Hard threshold on magnitude; fallback to argmax if empty
+            mag_hard = (mag > 0.5).to(mag.dtype)
+            empty = (mag_hard.sum(dim=-1, keepdim=True) == 0)
+            if empty.any():
+                idx = torch.argmax(L.abs(), dim=-1, keepdim=True)
+                mag_hard = torch.where(
+                    empty,
+                    torch.zeros_like(mag_hard).scatter(-1, idx, 1.0),
+                    mag_hard,
+                )
+            O_hard = torch.sign(L) * mag_hard
+            O = O_hard + (O - O.detach())
+
 
         # Expose selector tensors for external logging to avoid recomputation elsewhere
         self._last_G = G.detach()
