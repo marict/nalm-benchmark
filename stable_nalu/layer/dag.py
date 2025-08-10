@@ -56,7 +56,10 @@ class DAGLayer(ExtendedTorchModule):
         use_ste_G: bool = True,  # Always on
         use_layer_norm: bool = True,
         use_extra_layer_norm: bool = True,
-        use_sparsemax_select: bool = True,
+        use_sparsemax_select: bool = False,
+        use_entmax_select: bool = True,
+        entmax_alpha: float = 1.5,
+        use_topk2_projection: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
@@ -69,8 +72,7 @@ class DAGLayer(ExtendedTorchModule):
         self.in_features = in_features
         self.out_features = out_features
 
-        # Execution graph sizing: initial nodes come from input features
-        # Total nodes = initial nodes + dag_depth (each step produces one new node)
+        # Execution graph sizing: initial nodes come num subsets
         self.dag_depth = (
             int(dag_depth) if dag_depth is not None else max(1, in_features - 1)
         )
@@ -82,6 +84,9 @@ class DAGLayer(ExtendedTorchModule):
         self.use_ste_O = bool(use_ste_O)
         self.use_ste_G = bool(use_ste_G)
         self.use_sparsemax_select = bool(use_sparsemax_select)
+        self.use_entmax_select = bool(use_entmax_select)
+        self.entmax_alpha = float(entmax_alpha)
+        self.use_topk2_projection = bool(use_topk2_projection)
 
         # Normalize inputs and optionally add extra normalization around structure heads
         self.input_norm = nn.LayerNorm(in_features) if use_layer_norm else None
@@ -102,13 +107,14 @@ class DAGLayer(ExtendedTorchModule):
         # Operand selector matrix O: shape (dag_depth, total_nodes)
         self.O_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
         # Optional separate heads for signed sparse selection
-        if self.use_sparsemax_select:
+        if self.use_sparsemax_select or self.use_entmax_select:
             self.O_pos_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
             self.O_neg_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
         else:
             self.O_pos_head = None
             self.O_neg_head = None
         self.O_scale = None  # removed scaling to avoid magnitude hacks in linear domain
+
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
 
@@ -169,6 +175,48 @@ class DAGLayer(ExtendedTorchModule):
         tau_z = (z_threshold - 1) / k_z.clamp_min(1).to(logits.dtype)
         # Projection
         p = torch.clamp(z - tau_z, min=0.0)
+        return p
+
+    @staticmethod
+    def _entmax(
+        logits: torch.Tensor, alpha: float = 1.5, dim: int = -1, n_iter: int = 50
+    ) -> torch.Tensor:
+        """Entmax mapping with parameter alpha in (1, 2].
+
+        Uses bisection to find the threshold tau such that
+        sum(((alpha-1)*z - tau)_+^{1/(alpha-1)}) = 1.
+        Returns a probability vector (nonnegative, sums to 1) that can be sparse.
+        """
+        if alpha <= 1.0 or alpha > 2.0:
+            raise ValueError("entmax alpha must be in (1, 2]")
+
+        # Shift for numerical stability
+        z = logits - logits.max(dim=dim, keepdim=True).values
+        d = z.size(dim)
+
+        # Lower/upper bounds for tau
+        tau_lo = z.min(dim=dim, keepdim=True).values - 1.0
+        tau_hi = z.max(dim=dim, keepdim=True).values - 1e-12
+
+        def phi(tau: torch.Tensor) -> torch.Tensor:
+            # Compute sum of powered positives for a given tau
+            u = torch.clamp((alpha - 1.0) * z - tau, min=0.0)
+            return torch.sum(u.pow(1.0 / (alpha - 1.0)), dim=dim, keepdim=True)
+
+        # Bisection
+        for _ in range(n_iter):
+            tau_m = (tau_lo + tau_hi) * 0.5
+            f_m = phi(tau_m)
+            go_right = f_m > 1.0
+            tau_lo = torch.where(go_right, tau_m, tau_lo)
+            tau_hi = torch.where(go_right, tau_hi, tau_m)
+
+        tau_star = tau_hi
+        u = torch.clamp((alpha - 1.0) * z - tau_star, min=0.0)
+        p = u.pow(1.0 / (alpha - 1.0))
+        # Normalize for numerical accuracy
+        p_sum = p.sum(dim=dim, keepdim=True) + 1e-12
+        p = p / p_sum
         return p
 
     @staticmethod
@@ -239,14 +287,18 @@ class DAGLayer(ExtendedTorchModule):
         if self.head_norm is not None:
             head_input = self.head_norm(head_input)
 
-        if self.use_sparsemax_select:
+        if self.use_sparsemax_select or self.use_entmax_select:
             # Separate positive and negative selections via sparsemax
             O_pos_flat = self.O_pos_head(head_input)
             O_neg_flat = self.O_neg_head(head_input)
             O_pos = O_pos_flat.view(B, self.dag_depth, self.total_nodes)
             O_neg = O_neg_flat.view(B, self.dag_depth, self.total_nodes)
-            O_pos = self._sparsemax(O_pos, dim=-1)
-            O_neg = self._sparsemax(O_neg, dim=-1)
+            if self.use_entmax_select:
+                O_pos = self._entmax(O_pos, alpha=self.entmax_alpha, dim=-1)
+                O_neg = self._entmax(O_neg, alpha=self.entmax_alpha, dim=-1)
+            else:
+                O_pos = self._sparsemax(O_pos, dim=-1)
+                O_neg = self._sparsemax(O_neg, dim=-1)
             O = O_pos - O_neg
             O = O.to(dtype)
         else:
@@ -255,6 +307,18 @@ class DAGLayer(ExtendedTorchModule):
             if self.O_norm is not None:
                 O = self.O_norm(O)
             O = O.to(dtype)
+
+        # Optional: top-k=2 signed projection per step (straight-through)
+        if self.use_topk2_projection:
+            # Keep gradients via straight-through estimator
+            O_pre = O
+            k = 2 if self.total_nodes >= 2 else 1
+            topk = torch.topk(O_pre.abs(), k=k, dim=-1)
+            idx = topk.indices
+            signs = torch.sign(O_pre.gather(-1, idx))
+            O_hard = torch.zeros_like(O_pre)
+            O_hard = O_hard.scatter(-1, idx, signs)
+            O = O_hard + (O_pre - O_pre.detach())
         G_logits = self.G_head(head_input)  # (B, dag_depth)
         G = torch.sigmoid(G_logits).to(dtype)
 

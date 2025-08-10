@@ -630,6 +630,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     npu_Wr_init=args.npu_Wr_init,
     nru_div_mode=args.nru_div_mode,
     realnpu_reg_type=args.realnpu_reg_type,
+    dag_depth=args.num_subsets + 1,
 )
 model.reset_parameters()
 if args.cuda:
@@ -724,13 +725,17 @@ for epoch_i, (x_train, t_train) in zip(
                 if "use_ste_O" in module.__dict__:
                     if module.use_ste_O is False:
                         module.use_ste_O = True
-                        print(f"Flipped {module.__class__.__name__} to use_ste_O")
+                        print(
+                            f"************ Flipped {module.__class__.__name__} to use_ste_O ************"
+                        )
         # Flip back to non-STE if interpolation degrades above a higher threshold (hysteresis)
         elif float(interpolation_error) > 0.2:
             for module in model.modules():
                 if "use_ste_O" in module.__dict__ and module.use_ste_O is True:
                     module.use_ste_O = False
-                    print(f"Flipped {module.__class__.__name__} back to non-STE_O")
+                    print(
+                        f"************ Flipped {module.__class__.__name__} back to non-STE_O ************"
+                    )
 
     # forward
     y_train = model(x_train)
@@ -811,14 +816,13 @@ for epoch_i, (x_train, t_train) in zip(
             "train %d: %.5f, inter: %.5f, extra: %.5f"
             % (epoch_i, loss_train_criterion, interpolation_error, extrapolation_error)
         )
-        # Inspect gate trajectory on the first sample across steps
+        # Inspect gate/selection on the first sample (concise)
         if dag is not None and hasattr(dag, "_last_G"):
-            x0 = x_train[0].detach().cpu().view(-1).tolist()
             y0 = float(y_train[0].detach().cpu().view(-1)[0].item())
             t0 = float(t_train[0].detach().cpu().view(-1)[0].item())
             g_first = dag._last_G[0].detach().cpu().tolist()
             o_first = dag._last_O[0].detach().cpu().tolist()
-            print(f"x0={x0:.6f} y0={y0:.6f} t0={t0:.6f}")
+            print(f"y0={y0:.6f} t0={t0:.6f}")
             print(f"G_first_sample: {g_first}")
             print(f"O_first_sample: {o_first}")
         wandb.log(log_dict, step=epoch_i)
