@@ -120,38 +120,25 @@ def main() -> None:
         # Provide a unique, readable name
         label = f"{args.operation}-seed{seed}-inter{str(inter_rng).replace(' ', '')}-extra{str(extra_rng).replace(' ', '')}"
         env["WANDB_NAME"] = label
-        print(f"[supervisor] starting {label}", flush=True)
-        # Stream output to parse W&B run info and surface early progress
-        proc = subprocess.Popen(
-            cmd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        saw_wandb = False
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            line_str = line.rstrip()
-            # Surface child logs into supervisor log
-            print(line_str, flush=True)
-            if (not saw_wandb) and ("Initialized W&B, run id:" in line_str):
-                # Example: Initialized W&B, run id: abc123, url: https://..., name: run-name
-                try:
-                    parts = line_str.split(",")
-                    run_id = parts[0].split(":")[-1].strip()
-                    url = parts[1].split(":", 1)[-1].strip()
-                    name = parts[2].split(":", 1)[-1].strip()
-                    print(
-                        f"[supervisor] W&B started for {label}: id={run_id} url={url} name={name}",
-                        flush=True,
-                    )
-                except Exception:
-                    print(f"[supervisor] W&B started for {label}", flush=True)
-                saw_wandb = True
-        proc.wait()
-        return (proc.returncode, label, seed)
+
+        # Redirect child output to a dedicated log file on the network volume to keep parent logs clean
+        def sanitize(s: str) -> str:
+            return "".join(c if (c.isalnum() or c in "-_.[],") else "_" for c in s)
+
+        log_dir = Path("/runpod-volume") / "supervisor-logs" / args.operation
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        log_path = log_dir / f"{sanitize(label)}.log"
+        with open(log_path, "w", encoding="utf-8") as log_file:
+            proc = subprocess.Popen(
+                cmd,
+                env=env,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            proc.wait()
+        return (proc.returncode, f"{label} -> {log_path}", seed)
 
     total = len(tasks)
     prog = tqdm(total=total, desc=f"{args.operation} seeds×ranges")
@@ -160,7 +147,6 @@ def main() -> None:
     if args.concurrency <= 1:
         for t in tasks:
             rc, label, _ = run_one(t)
-            print(f"[supervisor] finished {label} rc={rc}")
             prog.update(1)
             wandb.log({f"{args.operation}/launched_total": prog.n})
     else:
@@ -170,7 +156,6 @@ def main() -> None:
             for fut in concurrent.futures.as_completed(futures):
                 try:
                     rc, label, _ = fut.result()
-                    print(f"[supervisor] finished {label} rc={rc}")
                 except Exception as exc:
                     print(f"[supervisor] task failed with exception: {exc}")
                 finally:
