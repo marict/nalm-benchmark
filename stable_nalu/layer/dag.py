@@ -73,6 +73,7 @@ class DAGLayer(ExtendedTorchModule):
         use_ste_G: bool = True,  # Always on
         hard_eval: bool = True,
         selector_tau: float = SELECTOR_TAU_DEFAULT,
+        use_output_selector: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
@@ -99,6 +100,7 @@ class DAGLayer(ExtendedTorchModule):
         self.selector_tau = float(selector_tau)
         self.flip_ste_O = bool(flip_ste_O)
         self.hard_eval = bool(hard_eval)
+        self.use_output_selector = bool(use_output_selector)
 
         # Always-on normalizations for stability
         self.input_norm = nn.LayerNorm(in_features)
@@ -113,12 +115,17 @@ class DAGLayer(ExtendedTorchModule):
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
 
+        # Optional final output selector over intermediate nodes only (length == dag_depth)
+        self.output_selector_head = nn.Linear(in_features, self.dag_depth)
+
         # Initialize heads similar to standard small heads
         nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.O_head.bias)
         # no extra heads
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
+        nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
+        nn.init.zeros_(self.output_selector_head.bias)
 
         # Numerical guards
         self._mag_min = 1e-6
@@ -137,6 +144,8 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
+        nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
+        nn.init.zeros_(self.output_selector_head.bias)
 
     # Legacy mappings removed in simplified path
 
@@ -300,9 +309,29 @@ class DAGLayer(ExtendedTorchModule):
             working_mag = working_mag.scatter(-1, index_tensor, V_mag_new)
             working_sign = working_sign.scatter(-1, index_tensor, V_sign_new)
 
-        # Final output is the last node
-        final_idx = self.total_nodes - 1
-        final_value = working_sign[:, final_idx] * working_mag[:, final_idx]
+        # Final output: either last node or optional selector over intermediate nodes
+        if self.use_output_selector:
+            # Logits over intermediate nodes only (shape: (B, dag_depth))
+            out_logits = self.output_selector_head(head_input).to(dtype)
+            _eps = 1e-8
+            out_logits = torch.nan_to_num(
+                out_logits, nan=_eps, posinf=_eps, neginf=_eps
+            )
+
+            # Values for intermediate nodes slice [in_features : total_nodes) -> shape (B, dag_depth)
+            value_vec_inter = (working_sign * working_mag)[:, self.num_initial_nodes :]
+            if self.hard_eval and not self.training:
+                idx = torch.argmax(
+                    out_logits, dim=-1, keepdim=True
+                )  # (B,1) over dag_depth
+                final_value = value_vec_inter.gather(-1, idx).squeeze(-1)
+            else:
+                probs = torch.softmax(out_logits / tau, dim=-1)
+                final_value = torch.sum(probs * value_vec_inter, dim=-1)
+        else:
+            # Default: use the last node
+            final_idx = self.total_nodes - 1
+            final_value = working_sign[:, final_idx] * working_mag[:, final_idx]
 
         if final_value.isnan().any():
             print(f"NAN in final value: {final_value}")

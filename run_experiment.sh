@@ -11,11 +11,11 @@ if [ -z "$SEED" ]; then
   SEED="--seed 0"
 fi
 
-python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation div --input-size 4 --batch-size 256 --max-iterations 300000 --log-interval 10000 --clip-grad-norm 1.0 --lr-cosine --lr-min 1e-4 --pod-name nalm-div$SUFFIX $SEED
+python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation div --input-size 4 --batch-size 256 --max-iterations 300000 --log-interval 10000 --clip-grad-norm 1.0 --lr-cosine --lr-min 1e-4 --lifetime-minutes 60 --pod-name nalm-div$SUFFIX $SEED
 
-python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation mul --input-size 4 --batch-size 256 --max-iterations 300000 --log-interval 10000 --clip-grad-norm 1.0 --lr-cosine --lr-min 1e-4 --pod-name nalm-mul$SUFFIX $SEED
+python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation mul --input-size 4 --batch-size 256 --max-iterations 300000 --log-interval 10000 --clip-grad-norm 1.0 --lr-cosine --lr-min 1e-4 --lifetime-minutes 60 --pod-name nalm-mul$SUFFIX $SEED
 
-python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation add --input-size 4 --batch-size 256 --max-iterations 300000 --log-interval 10000 --clip-grad-norm 1.0 --lr-cosine --lr-min 1e-4 --pod-name nalm-add$SUFFIX $SEED
+python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation add --input-size 4 --batch-size 256 --max-iterations 300000 --log-interval 10000 --clip-grad-norm 1.0 --lr-cosine --lr-min 1e-4 --lifetime-minutes 60 --pod-name nalm-add$SUFFIX $SEED
 
-python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation sub --input-size 4 --batch-size 256 --max-iterations 300000 --log-interval 10000 --clip-grad-norm 1.0 --lr-cosine --lr-min 1e-4 --pod-name nalm-sub$SUFFIX $SEED
+python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation sub --input-size 4 --batch-size 256 --max-iterations 300000 --log-interval 10000 --clip-grad-norm 1.0 --lr-cosine --lr-min 1e-4 --lifetime-minutes 60 --pod-name nalm-sub$SUFFIX $SEED
 
