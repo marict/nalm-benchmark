@@ -12,6 +12,14 @@ from tqdm import tqdm
 
 import wandb
 
+
+# Build a unique, readable W&B run label for a task
+def build_label(operation: str, seed: int, inter_rng, extra_rng) -> str:
+    inter_s = str(inter_rng).replace(" ", "")
+    extra_s = str(extra_rng).replace(" ", "")
+    return f"{operation}-seed{seed}-inter{inter_s}-extra{extra_s}"
+
+
 # Keep this list in sync with run_multi_seed.py
 RANGE_PAIRS: List[Tuple[List[float], List[float] | List[List[float]]]] = [
     ([-20.0, -10.0], [-40.0, -20.0]),
@@ -118,7 +126,7 @@ def main() -> None:
         env.pop("WANDB_RUN_ID", None)
         env.pop("WANDB_RESUME", None)
         # Provide a unique, readable name
-        label = f"{args.operation}-seed{seed}-inter{str(inter_rng).replace(' ', '')}-extra{str(extra_rng).replace(' ', '')}"
+        label = build_label(args.operation, seed, inter_rng, extra_rng)
         env["WANDB_NAME"] = label
 
         # Redirect child output to a dedicated log file on the network volume to keep parent logs clean
@@ -146,21 +154,31 @@ def main() -> None:
 
     if args.concurrency <= 1:
         for t in tasks:
-            rc, label, _ = run_one(t)
+            # Mark as launched at submission time
+            seed, inter_rng, extra_rng = t
+            launch_label = build_label(args.operation, seed, inter_rng, extra_rng)
+            print(f"[supervisor] launched {launch_label}")
             prog.update(1)
             wandb.log({f"{args.operation}/launched_total": prog.n})
+            # Run in foreground (sequential)
+            _ = run_one(t)
     else:
         max_workers = max(1, int(args.concurrency))
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
-            futures = [ex.submit(run_one, t) for t in tasks]
+            futures: list[concurrent.futures.Future] = []
+            for t in tasks:
+                seed, inter_rng, extra_rng = t
+                launch_label = build_label(args.operation, seed, inter_rng, extra_rng)
+                print(f"[supervisor] launched {launch_label}")
+                prog.update(1)
+                wandb.log({f"{args.operation}/launched_total": prog.n})
+                futures.append(ex.submit(run_one, t))
+            # Optionally consume completions just to surface exceptions
             for fut in concurrent.futures.as_completed(futures):
                 try:
-                    rc, label, _ = fut.result()
+                    _ = fut.result()
                 except Exception as exc:
                     print(f"[supervisor] task failed with exception: {exc}")
-                finally:
-                    prog.update(1)
-                    wandb.log({f"{args.operation}/launched_total": prog.n})
     prog.close()
     wandb.finish()
 
