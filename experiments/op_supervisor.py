@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import List, Tuple
+
+# Keep this list in sync with run_multi_seed.py
+RANGE_PAIRS: List[Tuple[List[float], List[float] | List[List[float]]]] = [
+    ([-20.0, -10.0], [-40.0, -20.0]),
+    ([-2.0, -1.0], [-6.0, -2.0]),
+    ([-1.2, -1.1], [-6.1, -1.2]),
+    ([-0.2, -0.1], [-2.0, -0.2]),
+    ([-2.0, 2.0], [[-6.0, -2.0], [2.0, 6.0]]),
+    ([0.1, 0.2], [0.2, 2.0]),
+    ([1.0, 2.0], [2.0, 6.0]),
+    ([1.1, 1.2], [1.2, 6.0]),
+    ([10.0, 20.0], [20.0, 40.0]),
+]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="On-pod supervisor: runs all seeds × ranges for one op"
+    )
+    parser.add_argument("--operation", required=True)
+    parser.add_argument("--input-size", type=int, required=True)
+    parser.add_argument("--batch-size", type=int, required=True)
+    parser.add_argument("--max-iterations", type=int, required=True)
+    parser.add_argument("--learning-rate", type=float, required=True)
+    parser.add_argument("--log-interval", type=int, required=True)
+    parser.add_argument("--start-seed", type=int, default=0)
+    parser.add_argument("--num-seeds", type=int, default=25)
+    parser.add_argument("--concurrency", type=int, default=1)
+
+    args = parser.parse_args()
+
+    repo_root = Path(__file__).resolve().parents[2]
+    script_path = (
+        repo_root / "nalm-benchmark" / "experiments" / "single_layer_benchmark.py"
+    )
+    python_exec = sys.executable
+
+    tasks: List[Tuple[int, List[float], List[float] | List[List[float]]]] = []
+    for seed in range(args.start_seed, args.start_seed + args.num_seeds):
+        for inter_rng, extra_rng in RANGE_PAIRS:
+            tasks.append((seed, inter_rng, extra_rng))
+
+    def run_one(
+        task: Tuple[int, List[float], List[float] | List[List[float]]],
+    ) -> Tuple[int, str, int]:
+        seed, inter_rng, extra_rng = task
+        cmd: List[str] = [
+            python_exec,
+            "-u",
+            str(script_path),
+            "--layer-type",
+            "DAG",
+            "--operation",
+            args.operation,
+            "--input-size",
+            str(args.input_size),
+            "--batch-size",
+            str(args.batch_size),
+            "--max-iterations",
+            str(args.max_iterations),
+            "--learning-rate",
+            str(args.learning_rate),
+            "--log-interval",
+            str(args.log_interval),
+            "--interpolation-range",
+            str(inter_rng),
+            "--extrapolation-range",
+            str(extra_rng),
+            "--seed",
+            str(seed),
+        ]
+        env = os.environ.copy()
+        env.setdefault("WANDB_PROJECT", "nalm-benchmark")
+        label = f"seed={seed} inter={str(inter_rng).replace(' ', '')} extra={str(extra_rng).replace(' ', '')}"
+        print(f"[supervisor] starting {label}")
+        proc = subprocess.run(cmd, check=False, env=env)
+        return (proc.returncode, label, seed)
+
+    if args.concurrency <= 1:
+        for t in tasks:
+            rc, label, _ = run_one(t)
+            print(f"[supervisor] finished {label} rc={rc}")
+    else:
+        max_workers = max(1, int(args.concurrency))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = [ex.submit(run_one, t) for t in tasks]
+            for fut in concurrent.futures.as_completed(futures):
+                try:
+                    rc, label, _ = fut.result()
+                    print(f"[supervisor] finished {label} rc={rc}")
+                except Exception as exc:
+                    print(f"[supervisor] task failed with exception: {exc}")
+
+
+if __name__ == "__main__":
+    main()

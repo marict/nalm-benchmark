@@ -143,16 +143,13 @@ def run_single(
 
 def _run_op_on_runpod(repo_root: Path, op_name: str) -> None:
     runpod_service_path = repo_root / "runpod_service" / "runpod_service.py"
-    script_path = (
-        repo_root / "nalm-benchmark" / "experiments" / "single_layer_benchmark.py"
-    )
+    # Launch an on-pod supervisor that runs all seeds × ranges sequentially
+    script_path = repo_root / "nalm-benchmark" / "experiments" / "op_supervisor.py"
     python_exec = sys.executable
 
     pod_name = f"multi-seed-DAG-{op_name}"
 
     base_args: List[str] = [
-        "--layer-type",
-        "DAG",
         "--operation",
         op_name,
         "--input-size",
@@ -165,82 +162,26 @@ def _run_op_on_runpod(repo_root: Path, op_name: str) -> None:
         str(LEARNING_RATE),
         "--log-interval",
         str(LOG_INTERVAL),
+        "--start-seed",
+        str(START_SEED),
+        "--num-seeds",
+        str(SEEDS),
     ]
 
-    # Launch pod with first combination (first seed, first range)
-    first_seed = START_SEED
-    first_inter, first_extra = RANGE_PAIRS[0]
+    # Launch pod which will run all seeds × ranges for this op
     create_cmd: List[str] = [
         python_exec,
         "-u",
         str(runpod_service_path),
         str(script_path),
         *base_args,
-        "--interpolation-range",
-        str(first_inter),
-        "--extrapolation-range",
-        str(first_extra),
-        "--seed",
-        str(first_seed),
         "--pod-name",
         pod_name,
         "--lifetime-minutes",
         "60",
     ]
-    print(
-        f"[runpod] Launching pod '{pod_name}' for op='{op_name}' with seed={first_seed}, range_idx=0"
-    )
+    print(f"[runpod] Launching pod '{pod_name}' for op='{op_name}' (supervisor mode)")
     subprocess.run(create_cmd, check=True)
-
-    time.sleep(20)
-
-    # Attach remaining combinations
-    for seed in range(START_SEED, START_SEED + SEEDS):
-        for r_idx, (inter_rng, extra_rng) in enumerate(RANGE_PAIRS):
-            if seed == first_seed and r_idx == 0:
-                continue
-            attach_cmd: List[str] = [
-                python_exec,
-                "-u",
-                str(runpod_service_path),
-                str(script_path),
-                *base_args,
-                "--interpolation-range",
-                str(inter_rng),
-                "--extrapolation-range",
-                str(extra_rng),
-                "--seed",
-                str(seed),
-                "--attach",
-                pod_name,
-                "--attach-note",
-                f"seed-{seed}-range-{r_idx}",
-            ]
-            print(
-                f"[runpod] Attaching seed={seed} range_idx={r_idx} to pod '{pod_name}'"
-            )
-            max_attempts = 6
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    result = subprocess.run(
-                        attach_cmd, check=True, capture_output=True, text=True
-                    )
-                    if result.stdout:
-                        print(result.stdout.strip())
-                    if result.stderr:
-                        print(result.stderr.strip())
-                    break
-                except subprocess.CalledProcessError as exc:
-                    if attempt >= max_attempts:
-                        print(
-                            f"[runpod] Failed to attach seed={seed} range_idx={r_idx} after {attempt} attempts: {exc}"
-                        )
-                        break
-                    wait_s = 10
-                    print(
-                        f"[runpod] Attach attempt {attempt} failed; retrying in {wait_s}s..."
-                    )
-                    time.sleep(wait_s)
 
 
 def main() -> None:
