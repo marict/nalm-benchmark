@@ -73,7 +73,7 @@ class DAGLayer(ExtendedTorchModule):
         use_ste_G: bool = True,  # Always on
         hard_eval: bool = True,
         selector_tau: float = SELECTOR_TAU_DEFAULT,
-        use_output_selector: bool = False,
+        use_output_selector: bool = True,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
