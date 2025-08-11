@@ -35,8 +35,6 @@ groks at: 19000
 python experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation add --input-size 3 --batch-size 1024 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --learning-rate 1e-3
 
 
-
-
 """
 
 
@@ -59,7 +57,7 @@ class DAGLayer(ExtendedTorchModule):
       'dag_depth' when constructing the layer through the GeneralizedLayer.
     """
 
-    SELECTOR_TAU_DEFAULT = 1
+    SELECTOR_TAU_DEFAULT = 2
 
     def __init__(
         self,
