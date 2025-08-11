@@ -57,8 +57,6 @@ class DAGLayer(ExtendedTorchModule):
       'dag_depth' when constructing the layer through the GeneralizedLayer.
     """
 
-    SELECTOR_TAU_DEFAULT = 2
-
     def __init__(
         self,
         in_features: int,
@@ -68,12 +66,8 @@ class DAGLayer(ExtendedTorchModule):
         dag_depth: int | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        use_ste_O: bool = False,
-        flip_ste_O: bool = False,
         use_ste_G: bool = True,  # Always on
-        hard_eval: bool = True,
-        selector_tau: float = SELECTOR_TAU_DEFAULT,
-        use_output_selector: bool = True,
+        use_output_selector: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
@@ -95,11 +89,7 @@ class DAGLayer(ExtendedTorchModule):
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
-        self.use_ste_O = bool(use_ste_O)
         self.use_ste_G = bool(use_ste_G)
-        self.selector_tau = float(selector_tau)
-        self.flip_ste_O = bool(flip_ste_O)
-        self.hard_eval = bool(hard_eval)
         self.use_output_selector = bool(use_output_selector)
 
         # Always-on normalizations for stability
@@ -189,6 +179,13 @@ class DAGLayer(ExtendedTorchModule):
         log_mag_result = torch.exp(R_mag_clamped)
         return G_step * linear_mag + (1.0 - G_step) * log_mag_result
 
+    def _fail_if_nan(self, name: str, tensor: torch.Tensor) -> None:
+        if torch.isnan(tensor).any():
+            idx = torch.nonzero(torch.isnan(tensor), as_tuple=False)[0].tolist()
+            raise ValueError(
+                f"NaN detected in {name} at index {idx}; shape={tuple(tensor.shape)}"
+            )
+
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         # input: (B, in_features)
         if input.dim() != 2 or input.size(1) != self.in_features:
@@ -216,9 +213,7 @@ class DAGLayer(ExtendedTorchModule):
         )  # (B, in_features)
         if self.head_norm is not None:
             head_input = self.head_norm(head_input)
-        # Guard against NaNs in features (use small positive to keep gradients alive)
-        _eps = 1e-8
-        head_input = torch.nan_to_num(head_input, nan=_eps, posinf=_eps, neginf=_eps)
+        self._fail_if_nan("head_input", head_input)
 
         # Soft selector with temperature; O in [-1,1]
         O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
@@ -226,19 +221,15 @@ class DAGLayer(ExtendedTorchModule):
         if self.O_norm is not None:
             L = self.O_norm(L)
         L = L.to(dtype)
-        # Guard selector logits
-        L = torch.nan_to_num(L, nan=_eps, posinf=_eps, neginf=_eps)
-        tau = float(self.selector_tau)
-        if not (tau > 0):
-            tau = self.SELECTOR_TAU_DEFAULT
-        sign = torch.tanh(L / tau)
-        mag = torch.sigmoid(torch.abs(L) / tau)
+        self._fail_if_nan("L (selector logits)", L)
+        sign = torch.tanh(L)
+        mag = torch.sigmoid(torch.abs(L))
         O = sign * mag
-        O = torch.nan_to_num(O, nan=_eps, posinf=_eps, neginf=_eps)
+        self._fail_if_nan("O (selector)", O)
         G_logits = self.G_head(head_input)  # (B, dag_depth)
-        G_logits = torch.nan_to_num(G_logits, nan=_eps, posinf=_eps, neginf=_eps)
+        self._fail_if_nan("G_logits", G_logits)
         G = torch.sigmoid(G_logits).to(dtype)
-        G = torch.nan_to_num(G, nan=_eps, posinf=_eps, neginf=_eps)
+        self._fail_if_nan("G (gate)", G)
 
         # Optionally freeze G to linear domain (G==1)
         if self.freeze_g_linear:
@@ -250,21 +241,9 @@ class DAGLayer(ExtendedTorchModule):
         if self.use_ste_G:
             G_hard = (G > 0.5).to(G.dtype)
             G = G_hard + (G - G.detach())
-        if self.flip_ste_O and self.use_ste_O:
-            # Hard threshold on magnitude; fallback to argmax if empty
-            mag_hard = (mag > 0.5).to(mag.dtype)
-            empty = mag_hard.sum(dim=-1, keepdim=True) == 0
-            if empty.any():
-                idx = torch.argmax(L.abs(), dim=-1, keepdim=True)
-                mag_hard = torch.where(
-                    empty,
-                    torch.zeros_like(mag_hard).scatter(-1, idx, 1.0),
-                    mag_hard,
-                )
-            O_hard = torch.sign(L) * mag_hard
-            O = O_hard + (O - O.detach())
 
-        if self.hard_eval and not self.training:
+        # Always harden in eval mode
+        if not self.training:
             O = torch.round(O).clamp(-1.0, 1.0)
             G = (G > 0.5).to(G.dtype)
 
@@ -292,13 +271,11 @@ class DAGLayer(ExtendedTorchModule):
             R_mag = self._compute_domain_mixed_result(
                 working_mag, working_sign, O_step, G_step
             )
-            R_mag = torch.nan_to_num(R_mag, nan=_eps, posinf=_eps, neginf=_eps)
+            self._fail_if_nan("R_mag (mixed-domain result)", R_mag)
             V_sign_new = self._compute_new_sign(R_mag, working_sign, O_step, G_step)
             V_mag_new = self._compute_new_magnitude(R_mag, G_step)
-            V_sign_new = torch.nan_to_num(
-                V_sign_new, nan=_eps, posinf=_eps, neginf=_eps
-            )
-            V_mag_new = torch.nan_to_num(V_mag_new, nan=_eps, posinf=_eps, neginf=_eps)
+            self._fail_if_nan("V_sign_new", V_sign_new)
+            self._fail_if_nan("V_mag_new", V_mag_new)
 
             V_mag_new = torch.clamp(V_mag_new, min=self._mag_min, max=self._mag_max)
             V_sign_new = torch.clamp(V_sign_new, min=-1.0, max=1.0)
@@ -313,30 +290,24 @@ class DAGLayer(ExtendedTorchModule):
         if self.use_output_selector:
             # Logits over intermediate nodes only (shape: (B, dag_depth))
             out_logits = self.output_selector_head(head_input).to(dtype)
-            _eps = 1e-8
-            out_logits = torch.nan_to_num(
-                out_logits, nan=_eps, posinf=_eps, neginf=_eps
-            )
+            self._fail_if_nan("out_logits (output selector)", out_logits)
 
             # Values for intermediate nodes slice [in_features : total_nodes) -> shape (B, dag_depth)
             value_vec_inter = (working_sign * working_mag)[:, self.num_initial_nodes :]
-            if self.hard_eval and not self.training:
+            if not self.training:
                 idx = torch.argmax(
                     out_logits, dim=-1, keepdim=True
                 )  # (B,1) over dag_depth
                 final_value = value_vec_inter.gather(-1, idx).squeeze(-1)
             else:
-                probs = torch.softmax(out_logits / tau, dim=-1)
+                probs = torch.softmax(out_logits, dim=-1)
                 final_value = torch.sum(probs * value_vec_inter, dim=-1)
         else:
             # Default: use the last node
             final_idx = self.total_nodes - 1
             final_value = working_sign[:, final_idx] * working_mag[:, final_idx]
 
-        if final_value.isnan().any():
-            print(f"NAN in final value: {final_value}")
-            print(f"Working mag: {working_mag}")
-            raise ValueError("NAN in final value")
+        self._fail_if_nan("final_value", final_value)
 
         # Return with expected dtype
         return final_value.to(input.dtype).unsqueeze(-1)  # (B, 1)

@@ -177,9 +177,10 @@ class SimpleFunctionDatasetFork(torch.utils.data.Dataset):
     def _sample(self, lower_bound, upper_bound, batch_size):
         distribution_family = self._dist_params[0]
         if distribution_family == "uniform":
-            return self._rng.uniform(
+            result = self._rng.uniform(
                 low=lower_bound, high=upper_bound, size=(batch_size,) + self._shape
             )
+            return result
 
         elif distribution_family == "truncated-normal":
             _, in_mean, in_std, ex_mean, ex_std = self._dist_params

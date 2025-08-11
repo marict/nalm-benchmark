@@ -16,10 +16,31 @@ import wandb
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
-wandb.init()
-print(
-    f"Initialized W&B, run id: {wandb.run.id}, url: {wandb.run.url}, name: {wandb.run.name}"
-)
+try:
+    # Agent/non-interactive friendly: if WANDB is not available or login cannot prompt (no TTY),
+    # fall back to disabled mode so automated runs don't crash. Local users with API keys set
+    # via shell init (e.g., ~/.zshrc) will use normal wandb.init().
+    if os.getenv("WANDB_DISABLED", "").lower() in ("1", "true") or os.getenv(
+        "WANDB_MODE", ""
+    ).lower() in (
+        "disabled",
+        "offline",
+    ):
+        wandb.init(mode="disabled")
+    else:
+        wandb.init()
+    print(
+        f"Initialized W&B, run id: {wandb.run.id}, url: {wandb.run.url}, name: {wandb.run.name}"
+    )
+except (
+    Exception
+) as _wandb_exc:  # Fallback to disabled mode if login fails (e.g., no TTY)
+    print(f"W&B disabled due to: {_wandb_exc}")
+    os.environ["WANDB_DISABLED"] = "true"
+    try:
+        wandb.init(mode="disabled")
+    except Exception:
+        pass
 
 # Parse arguments
 parser = argparse.ArgumentParser(description="Runs the simple function static task")
@@ -102,14 +123,14 @@ parser.add_argument(
 parser.add_argument(
     "--interpolation-range",
     action="store",
-    default=[1, 4],
+    default=[1, 2],
     type=ast.literal_eval,
     help="Specify the interpolation range that is sampled uniformly from",
 )
 parser.add_argument(
     "--extrapolation-range",
     action="store",
-    default=[4, 8],
+    default=[2, 4],
     type=ast.literal_eval,
     help="Specify the extrapolation range that is sampled uniformly from",
 )
@@ -258,17 +279,24 @@ parser.add_argument(
     help="Specify the learning-rate",
 )
 parser.add_argument(
-    "--lr-cosine",
+    "--lr-step",
     action="store_true",
     default=False,
-    help="Use cosine decay from --learning-rate to --lr-min over max-iterations",
+    help="Enable stepwise LR decay (StepLR)",
 )
 parser.add_argument(
     "--lr-min",
     action="store",
     default=1e-6,
     type=float,
-    help="Final learning rate for cosine decay",
+    help="Target final learning rate when --lr-step is set",
+)
+parser.add_argument(
+    "--lr-step-count",
+    action="store",
+    default=5,
+    type=int,
+    help="Number of uniform LR decay steps across max-iterations when --lr-step is set",
 )
 parser.add_argument(
     "--momentum",
@@ -660,10 +688,23 @@ elif args.optimizer == "sgd":
 else:
     raise ValueError(f"{args.optimizer} is not a valid optimizer algorithm")
 
-# Optional cosine LR schedule
-if args.lr_cosine:
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=args.max_iterations, eta_min=args.lr_min
+# Optional stepwise LR schedule (uniform over training duration)
+if args.lr_step:
+    # Derive a uniform step interval from max-iterations and desired step count
+    step_count = max(1, int(args.lr_step_count))
+    step_size = max(1, int(args.max_iterations // step_count))
+    # Compute gamma to reach lr_min from learning_rate in exactly step_count steps
+    initial_lr = float(args.learning_rate)
+    target_lr = float(args.lr_min)
+    if target_lr <= 0:
+        target_lr = 1e-12
+    # Ensure monotonic non-increase; if lr_min >= lr_start, use gamma=1.0 (no decay)
+    if target_lr >= initial_lr:
+        gamma = 1.0
+    else:
+        gamma = (target_lr / initial_lr) ** (1.0 / float(step_count))
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer, step_size=step_size, gamma=gamma
     )
 else:
     scheduler = None
@@ -738,6 +779,16 @@ for epoch_i, (x_train, t_train) in zip(
     if epoch_i % args.log_interval == 0:
         interpolation_error = test_model(dataset_valid_interpolation_data)
         extrapolation_error = test_model(dataset_test_extrapolation_data)
+        # Early stopping if both errors are extremely low
+        _es_thr = 1e-10
+        if (
+            float(interpolation_error.detach().cpu().item()) < _es_thr
+            and float(extrapolation_error.detach().cpu().item()) < _es_thr
+        ):
+            print(
+                f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error:.10f}"
+            )
+            break
 
     # forward
     y_train = model(x_train)
