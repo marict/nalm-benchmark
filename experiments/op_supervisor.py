@@ -107,7 +107,12 @@ def main() -> None:
         ]
         env = os.environ.copy()
         env.setdefault("WANDB_PROJECT", "nalm-benchmark")
-        label = f"seed={seed} inter={str(inter_rng).replace(' ', '')} extra={str(extra_rng).replace(' ', '')}"
+        # Ensure each subprocess creates a fresh W&B run (no resume)
+        env.pop("WANDB_RUN_ID", None)
+        env.pop("WANDB_RESUME", None)
+        # Provide a unique, readable name
+        label = f"{args.operation}-seed{seed}-inter{str(inter_rng).replace(' ', '')}-extra{str(extra_rng).replace(' ', '')}"
+        env["WANDB_NAME"] = label
         print(f"[supervisor] starting {label}")
         proc = subprocess.run(cmd, check=False, env=env)
         return (proc.returncode, label, seed)
