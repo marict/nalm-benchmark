@@ -8,6 +8,10 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
+from tqdm import tqdm
+
+import wandb
+
 # Keep this list in sync with run_multi_seed.py
 RANGE_PAIRS: List[Tuple[List[float], List[float] | List[List[float]]]] = [
     ([-20.0, -10.0], [-40.0, -20.0]),
@@ -113,14 +117,49 @@ def main() -> None:
         # Provide a unique, readable name
         label = f"{args.operation}-seed{seed}-inter{str(inter_rng).replace(' ', '')}-extra{str(extra_rng).replace(' ', '')}"
         env["WANDB_NAME"] = label
-        print(f"[supervisor] starting {label}")
-        proc = subprocess.run(cmd, check=False, env=env)
+        print(f"[supervisor] starting {label}", flush=True)
+        # Stream output to parse W&B run info and surface early progress
+        proc = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        saw_wandb = False
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line_str = line.rstrip()
+            # Surface child logs into supervisor log
+            print(line_str, flush=True)
+            if (not saw_wandb) and ("Initialized W&B, run id:" in line_str):
+                # Example: Initialized W&B, run id: abc123, url: https://..., name: run-name
+                try:
+                    parts = line_str.split(",")
+                    run_id = parts[0].split(":")[-1].strip()
+                    url = parts[1].split(":", 1)[-1].strip()
+                    name = parts[2].split(":", 1)[-1].strip()
+                    print(
+                        f"[supervisor] W&B started for {label}: id={run_id} url={url} name={name}",
+                        flush=True,
+                    )
+                except Exception:
+                    print(f"[supervisor] W&B started for {label}", flush=True)
+                saw_wandb = True
+        proc.wait()
         return (proc.returncode, label, seed)
+
+    total = len(tasks)
+    prog = tqdm(total=total, desc=f"{args.operation} seeds×ranges")
+    wandb.log({f"{args.operation}/launched_total": 0})
 
     if args.concurrency <= 1:
         for t in tasks:
             rc, label, _ = run_one(t)
             print(f"[supervisor] finished {label} rc={rc}")
+            prog.update(1)
+            wandb.log({f"{args.operation}/launched_total": prog.n})
     else:
         max_workers = max(1, int(args.concurrency))
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -131,6 +170,10 @@ def main() -> None:
                     print(f"[supervisor] finished {label} rc={rc}")
                 except Exception as exc:
                     print(f"[supervisor] task failed with exception: {exc}")
+                finally:
+                    prog.update(1)
+                    wandb.log({f"{args.operation}/launched_total": prog.n})
+    prog.close()
 
 
 if __name__ == "__main__":
