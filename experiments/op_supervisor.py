@@ -42,6 +42,9 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Initialize W&B to log supervisor progress into the pod's run (WANDB_RUN_ID provided by launcher)
+    wandb.init(tags=["runpod", "supervisor"], notes=f"op={args.operation}")
+
     # Resolve path to single_layer_benchmark.py robustly inside the pod
     here = Path(__file__).resolve()
     candidates = [
@@ -174,6 +177,7 @@ def main() -> None:
                     prog.update(1)
                     wandb.log({f"{args.operation}/launched_total": prog.n})
     prog.close()
+    wandb.finish()
 
 
 if __name__ == "__main__":
