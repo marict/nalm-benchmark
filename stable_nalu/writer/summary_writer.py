@@ -219,6 +219,10 @@ class DummySummaryWriter:
         self._logging_enabled = False
         self.name = "DummyWriter"
         self._iteration = 0
+        self._root = self
+        pass
+
+    def close(self):
         pass
 
     def add_scalar(self, name, value, verbose_only=True):

@@ -102,14 +102,14 @@ parser.add_argument(
 parser.add_argument(
     "--interpolation-range",
     action="store",
-    default=[1, 2],
+    default=[1, 4],
     type=ast.literal_eval,
     help="Specify the interpolation range that is sampled uniformly from",
 )
 parser.add_argument(
     "--extrapolation-range",
     action="store",
-    default=[2, 6],
+    default=[4, 8],
     type=ast.literal_eval,
     help="Specify the extrapolation range that is sampled uniformly from",
 )
@@ -256,6 +256,19 @@ parser.add_argument(
     default=1e-3,
     type=float,
     help="Specify the learning-rate",
+)
+parser.add_argument(
+    "--lr-cosine",
+    action="store_true",
+    default=False,
+    help="Use cosine decay from --learning-rate to --lr-min over max-iterations",
+)
+parser.add_argument(
+    "--lr-min",
+    action="store",
+    default=1e-6,
+    type=float,
+    help="Final learning rate for cosine decay",
 )
 parser.add_argument(
     "--momentum",
@@ -647,6 +660,14 @@ elif args.optimizer == "sgd":
 else:
     raise ValueError(f"{args.optimizer} is not a valid optimizer algorithm")
 
+# Optional cosine LR schedule
+if args.lr_cosine:
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=args.max_iterations, eta_min=args.lr_min
+    )
+else:
+    scheduler = None
+
 
 def test_model(data):
     with torch.no_grad(), model.no_internal_logging(), model.no_random():
@@ -717,25 +738,6 @@ for epoch_i, (x_train, t_train) in zip(
     if epoch_i % args.log_interval == 0:
         interpolation_error = test_model(dataset_valid_interpolation_data)
         extrapolation_error = test_model(dataset_test_extrapolation_data)
-
-        # Optional: flip DAG layers to STE once interpolation < 1.0 to harden structure
-        if float(interpolation_error) < 0.1:
-            flipped_any = False
-            for module in model.modules():
-                if "use_ste_O" in module.__dict__:
-                    if module.use_ste_O is False:
-                        module.use_ste_O = True
-                        print(
-                            f"************ Flipped {module.__class__.__name__} to use_ste_O ************"
-                        )
-        # Flip back to non-STE if interpolation degrades above a higher threshold (hysteresis)
-        elif float(interpolation_error) > 0.2:
-            for module in model.modules():
-                if "use_ste_O" in module.__dict__ and module.use_ste_O is True:
-                    module.use_ste_O = False
-                    print(
-                        f"************ Flipped {module.__class__.__name__} back to non-STE_O ************"
-                    )
 
     # forward
     y_train = model(x_train)
@@ -813,16 +815,19 @@ for epoch_i, (x_train, t_train) in zip(
         log_dict["mean/O"] = o_l1_mean
     if epoch_i % args.log_interval == 0:
         print(
-            "train %d: %.5f, inter: %.5f, extra: %.5f"
+            "train %d: %.10f, inter: %.10f, extra: %.10f"
             % (epoch_i, loss_train_criterion, interpolation_error, extrapolation_error)
         )
         # Inspect gate/selection on the first sample (concise)
         if dag is not None and hasattr(dag, "_last_G"):
+            x0 = x_train[0].detach().cpu().view(-1).tolist()
             y0 = float(y_train[0].detach().cpu().view(-1)[0].item())
             t0 = float(t_train[0].detach().cpu().view(-1)[0].item())
             g_first = dag._last_G[0].detach().cpu().tolist()
             o_first = dag._last_O[0].detach().cpu().tolist()
-            print(f"y0={y0:.6f} t0={t0:.6f}")
+            print(f"x0={x0}")
+            print(f"y0={y0}")
+            print(f"t0={t0}")
             print(f"G_first_sample: {g_first}")
             print(f"O_first_sample: {o_first}")
         wandb.log(log_dict, step=epoch_i)
@@ -835,6 +840,8 @@ for epoch_i, (x_train, t_train) in zip(
         if args.clip_grad_value != None:
             torch.nn.utils.clip_grad_value_(model.parameters(), args.clip_grad_value)
         optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
     model.optimize(loss_train_criterion)
 
     # Log gradients if in verbose mode
@@ -882,7 +889,6 @@ print()
 utils.print_model_params(model)
 
 stop_runpod()
-
 
 if not args.no_save:
     model.writer._root.close()  # fix - close summary writer before saving model to avoid thread locking issues

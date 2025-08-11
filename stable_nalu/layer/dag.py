@@ -19,7 +19,23 @@ python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single
 python /Users/paul_curry/ai2/runpod_service/runpod_service.py experiments/single_layer_benchmark.py --layer-type DAG --operation div --input-size 3 --batch-size 256 --max-iterations 25000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-div
 
 
-Things to try (on cloud):
+---
+SELECTOR_TAU_DEFAULT
+
+groks at: 11000
+python experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation div --input-size 3 --batch-size 1024 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --learning-rate 1e-3
+
+groks at: 2000
+python experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation sub --input-size 3 --batch-size 1024 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --learning-rate 1e-3
+
+groks at: 63000
+python experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation mul --input-size 3 --batch-size 1024 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --learning-rate 1e-3
+
+groks at: 19000
+python experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation add --input-size 3 --batch-size 1024 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --learning-rate 1e-3
+
+
+
 
 """
 
@@ -43,6 +59,8 @@ class DAGLayer(ExtendedTorchModule):
       'dag_depth' when constructing the layer through the GeneralizedLayer.
     """
 
+    SELECTOR_TAU_DEFAULT = 1
+
     def __init__(
         self,
         in_features: int,
@@ -55,7 +73,8 @@ class DAGLayer(ExtendedTorchModule):
         use_ste_O: bool = False,
         flip_ste_O: bool = False,
         use_ste_G: bool = True,  # Always on
-        selector_tau: float = 1.0,
+        hard_eval: bool = True,
+        selector_tau: float = SELECTOR_TAU_DEFAULT,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
@@ -81,6 +100,7 @@ class DAGLayer(ExtendedTorchModule):
         self.use_ste_G = bool(use_ste_G)
         self.selector_tau = float(selector_tau)
         self.flip_ste_O = bool(flip_ste_O)
+        self.hard_eval = bool(hard_eval)
 
         # Always-on normalizations for stability
         self.input_norm = nn.LayerNorm(in_features)
@@ -189,6 +209,9 @@ class DAGLayer(ExtendedTorchModule):
         )  # (B, in_features)
         if self.head_norm is not None:
             head_input = self.head_norm(head_input)
+        # Guard against NaNs in features (use small positive to keep gradients alive)
+        _eps = 1e-8
+        head_input = torch.nan_to_num(head_input, nan=_eps, posinf=_eps, neginf=_eps)
 
         # Soft selector with temperature; O in [-1,1]
         O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
@@ -196,12 +219,19 @@ class DAGLayer(ExtendedTorchModule):
         if self.O_norm is not None:
             L = self.O_norm(L)
         L = L.to(dtype)
-        tau = self.selector_tau if self.selector_tau > 0 else 1.0
+        # Guard selector logits
+        L = torch.nan_to_num(L, nan=_eps, posinf=_eps, neginf=_eps)
+        tau = float(self.selector_tau)
+        if not (tau > 0):
+            tau = self.SELECTOR_TAU_DEFAULT
         sign = torch.tanh(L / tau)
         mag = torch.sigmoid(torch.abs(L) / tau)
         O = sign * mag
+        O = torch.nan_to_num(O, nan=_eps, posinf=_eps, neginf=_eps)
         G_logits = self.G_head(head_input)  # (B, dag_depth)
+        G_logits = torch.nan_to_num(G_logits, nan=_eps, posinf=_eps, neginf=_eps)
         G = torch.sigmoid(G_logits).to(dtype)
+        G = torch.nan_to_num(G, nan=_eps, posinf=_eps, neginf=_eps)
 
         # Optionally freeze G to linear domain (G==1)
         if self.freeze_g_linear:
@@ -216,7 +246,7 @@ class DAGLayer(ExtendedTorchModule):
         if self.flip_ste_O and self.use_ste_O:
             # Hard threshold on magnitude; fallback to argmax if empty
             mag_hard = (mag > 0.5).to(mag.dtype)
-            empty = (mag_hard.sum(dim=-1, keepdim=True) == 0)
+            empty = mag_hard.sum(dim=-1, keepdim=True) == 0
             if empty.any():
                 idx = torch.argmax(L.abs(), dim=-1, keepdim=True)
                 mag_hard = torch.where(
@@ -227,6 +257,9 @@ class DAGLayer(ExtendedTorchModule):
             O_hard = torch.sign(L) * mag_hard
             O = O_hard + (O - O.detach())
 
+        if self.hard_eval and not self.training:
+            O = torch.round(O).clamp(-1.0, 1.0)
+            G = (G > 0.5).to(G.dtype)
 
         # Expose selector tensors for external logging to avoid recomputation elsewhere
         self._last_G = G.detach()
@@ -252,8 +285,13 @@ class DAGLayer(ExtendedTorchModule):
             R_mag = self._compute_domain_mixed_result(
                 working_mag, working_sign, O_step, G_step
             )
+            R_mag = torch.nan_to_num(R_mag, nan=_eps, posinf=_eps, neginf=_eps)
             V_sign_new = self._compute_new_sign(R_mag, working_sign, O_step, G_step)
             V_mag_new = self._compute_new_magnitude(R_mag, G_step)
+            V_sign_new = torch.nan_to_num(
+                V_sign_new, nan=_eps, posinf=_eps, neginf=_eps
+            )
+            V_mag_new = torch.nan_to_num(V_mag_new, nan=_eps, posinf=_eps, neginf=_eps)
 
             V_mag_new = torch.clamp(V_mag_new, min=self._mag_min, max=self._mag_max)
             V_sign_new = torch.clamp(V_sign_new, min=-1.0, max=1.0)
