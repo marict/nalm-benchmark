@@ -38,10 +38,37 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parents[2]
-    script_path = (
-        repo_root / "nalm-benchmark" / "experiments" / "single_layer_benchmark.py"
-    )
+    # Resolve path to single_layer_benchmark.py robustly inside the pod
+    here = Path(__file__).resolve()
+    candidates = [
+        # When repo root is the parent of 'nalm-benchmark'
+        here.parents[2]
+        / "nalm-benchmark"
+        / "experiments"
+        / "single_layer_benchmark.py",
+        Path("/tmp/repo")
+        / "nalm-benchmark"
+        / "experiments"
+        / "single_layer_benchmark.py",
+        Path("/workspace")
+        / "nalm-benchmark"
+        / "experiments"
+        / "single_layer_benchmark.py",
+        Path.cwd() / "nalm-benchmark" / "experiments" / "single_layer_benchmark.py",
+        # When repo root is the directory containing 'experiments'
+        here.parent.parent / "experiments" / "single_layer_benchmark.py",
+        Path("/tmp/repo") / "experiments" / "single_layer_benchmark.py",
+        Path("/workspace") / "experiments" / "single_layer_benchmark.py",
+        Path.cwd() / "experiments" / "single_layer_benchmark.py",
+    ]
+    script_path = next((p for p in candidates if p.exists()), None)
+    if script_path is None:
+        print(
+            "[supervisor] ERROR: could not locate single_layer_benchmark.py. Checked:"
+        )
+        for p in candidates:
+            print(f"  - {p}")
+        sys.exit(2)
     python_exec = sys.executable
 
     tasks: List[Tuple[int, List[float], List[float] | List[List[float]]]] = []

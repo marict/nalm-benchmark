@@ -166,6 +166,8 @@ def _run_op_on_runpod(repo_root: Path, op_name: str) -> None:
         str(START_SEED),
         "--num-seeds",
         str(SEEDS),
+        "--concurrency",
+        "2",
     ]
 
     # Launch pod which will run all seeds × ranges for this op
@@ -212,9 +214,20 @@ def main() -> None:
         )
 
     if args.use_runpod and not args.test:
-        for op in OPS:
-            _run_op_on_runpod(repo_root=repo_root, op_name=op)
-        print("All RunPod jobs launched.")
+        # Launch one pod per op concurrently; don't stop the whole script if one fails
+        import concurrent.futures
+
+        print("[runpod] Launching pods for ops:", ", ".join(OPS))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(OPS)) as ex:
+            fut_to_op = {ex.submit(_run_op_on_runpod, repo_root, op): op for op in OPS}
+            for fut in concurrent.futures.as_completed(fut_to_op):
+                op = fut_to_op[fut]
+                try:
+                    fut.result()
+                    print(f"[runpod] Pod launch submitted for op='{op}'")
+                except Exception as exc:
+                    print(f"[runpod] Failed to launch pod for op='{op}': {exc}")
+        print("[runpod] All pod launch requests processed.")
         return
 
     # Local execution path
