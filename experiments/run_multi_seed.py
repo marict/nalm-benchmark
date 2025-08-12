@@ -128,7 +128,7 @@ def run_single(
 
 
 def _run_op_on_runpod(repo_root: Path, op_name: str) -> None:
-    runpod_service_path = repo_root / "runpod_service" / "runpod_service.py"
+    runpod_service_path = repo_root / "runpod_service" / "runpod_launcher.py"
     # Launch an on-pod supervisor that runs all seeds × ranges sequentially
     script_path = repo_root / "nalm-benchmark" / "experiments" / "op_supervisor.py"
     python_exec = sys.executable
