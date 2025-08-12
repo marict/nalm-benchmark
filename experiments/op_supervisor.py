@@ -268,6 +268,12 @@ def main() -> None:
                         completed_ok,
                         completed_failed,
                     )
+            # Ensure all futures have completed
+            for fut in futures:
+                try:
+                    fut.result()
+                except Exception:
+                    pass
     # Record a final summary metric for quick inspection
     wandb.wrapper.summary[f"{args.operation}/launched_total_final"] = launched
     wandb.wrapper.summary[f"{args.operation}/completed_total_final"] = completed_total
