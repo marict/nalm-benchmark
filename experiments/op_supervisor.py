@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import functools
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Tuple
 
-from tqdm import tqdm
-
-import wandb
+from . import \
+    wandb_setup as wandb  # wandb.wrapper + wandb.run; validates env on import
+from .range_pairs import RANGE_PAIRS
 
 
 # Build a unique, readable W&B run label for a task
@@ -20,18 +21,90 @@ def build_label(operation: str, seed: int, inter_rng, extra_rng) -> str:
     return f"{operation}-seed{seed}-inter{inter_s}-extra{extra_s}"
 
 
-# Keep this list in sync with run_multi_seed.py
-RANGE_PAIRS: List[Tuple[List[float], List[float] | List[List[float]]]] = [
-    ([-20.0, -10.0], [-40.0, -20.0]),
-    ([-2.0, -1.0], [-6.0, -2.0]),
-    ([-1.2, -1.1], [-6.1, -1.2]),
-    ([-0.2, -0.1], [-2.0, -0.2]),
-    ([-2.0, 2.0], [[-6.0, -2.0], [2.0, 6.0]]),
-    ([0.1, 0.2], [0.2, 2.0]),
-    ([1.0, 2.0], [2.0, 6.0]),
-    ([1.1, 1.2], [1.2, 6.0]),
-    ([10.0, 20.0], [20.0, 40.0]),
-]
+def sanitize_label(s: str) -> str:
+    return "".join(c if (c.isalnum() or c in "-_.[],") else "_" for c in s)
+
+
+def log_completion(
+    operation: str,
+    launched_count: int,
+    completed_total: int,
+    completed_ok: int,
+    completed_failed: int,
+) -> None:
+    step_val = int(launched_count + completed_total)
+    wandb.wrapper.log(
+        {
+            f"{operation}/completed_total": completed_total,
+            f"{operation}/completed_ok": completed_ok,
+            f"{operation}/completed_failed": completed_failed,
+        },
+        step=step_val,
+        commit=True,
+    )
+
+
+def run_one(
+    task: Tuple[int, List[float], List[float] | List[List[float]]],
+    *,
+    python_exec: str,
+    script_path: Path,
+    operation: str,
+    input_size: int,
+    batch_size: int,
+    max_iterations: int,
+    learning_rate: float,
+    log_interval: int,
+) -> Tuple[int, str, int]:
+    seed, inter_rng, extra_rng = task
+    cmd: List[str] = [
+        python_exec,
+        "-u",
+        str(script_path),
+        "--layer-type",
+        "DAG",
+        "--operation",
+        operation,
+        "--input-size",
+        str(input_size),
+        "--batch-size",
+        str(batch_size),
+        "--max-iterations",
+        str(max_iterations),
+        "--learning-rate",
+        str(learning_rate),
+        "--log-interval",
+        str(log_interval),
+        "--interpolation-range",
+        str(inter_rng),
+        "--extrapolation-range",
+        str(extra_rng),
+        "--seed",
+        str(seed),
+    ]
+    env = os.environ.copy()
+    env.setdefault("WANDB_PROJECT", "nalm-benchmark")
+    # Ensure each subprocess creates a fresh W&B run (no resume)
+    env.pop("WANDB_RUN_ID", None)
+    env.pop("WANDB_RESUME", None)
+    # Provide a unique, readable name
+    label = build_label(operation, seed, inter_rng, extra_rng)
+    env["WANDB_NAME"] = label
+
+    # Redirect child output to a dedicated log file on the network volume
+    log_dir = Path("/runpod-volume") / "supervisor-logs" / operation
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"{sanitize_label(label)}.log"
+    with open(log_path, "w", encoding="utf-8") as log_file:
+        proc = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        proc.wait()
+    return (proc.returncode, f"{label} -> {log_path}", seed)
 
 
 def main() -> None:
@@ -50,19 +123,14 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Initialize W&B to log supervisor progress into the pod's run (WANDB_RUN_ID provided by launcher)
-    # Be explicit about resuming the launcher-created run so logs land in the same run page.
-    wandb_run_id = os.getenv("WANDB_RUN_ID")
-    wandb_project = os.getenv("WANDB_PROJECT", "nalm-benchmark")
+    # Strict env checks: require WANDB context to be present on the pod
+    wandb_api_key = os.getenv("WANDB_API_KEY")
+    if not wandb_api_key:
+        raise RuntimeError("WANDB_API_KEY must be set in the environment.")
     wandb_entity = os.getenv("WANDB_ENTITY")
-    wandb.init(
-        project=wandb_project,
-        entity=wandb_entity,
-        id=wandb_run_id if wandb_run_id else None,
-        resume="allow" if wandb_run_id else None,
-        tags=["runpod", "supervisor"],
-        notes=f"op={args.operation}",
-    )
+    if not wandb_entity:
+        raise RuntimeError("WANDB_ENTITY must be set in the environment.")
+    # W&B already initialized by import side-effect; if WANDB_RUN_ID set, this import attached to the same run
 
     # Resolve path to single_layer_benchmark.py robustly inside the pod
     here = Path(__file__).resolve()
@@ -102,81 +170,63 @@ def main() -> None:
         for inter_rng, extra_rng in RANGE_PAIRS:
             tasks.append((seed, inter_rng, extra_rng))
 
-    def run_one(
-        task: Tuple[int, List[float], List[float] | List[List[float]]],
-    ) -> Tuple[int, str, int]:
-        seed, inter_rng, extra_rng = task
-        cmd: List[str] = [
-            python_exec,
-            "-u",
-            str(script_path),
-            "--layer-type",
-            "DAG",
-            "--operation",
-            args.operation,
-            "--input-size",
-            str(args.input_size),
-            "--batch-size",
-            str(args.batch_size),
-            "--max-iterations",
-            str(args.max_iterations),
-            "--learning-rate",
-            str(args.learning_rate),
-            "--log-interval",
-            str(args.log_interval),
-            "--interpolation-range",
-            str(inter_rng),
-            "--extrapolation-range",
-            str(extra_rng),
-            "--seed",
-            str(seed),
-        ]
-        env = os.environ.copy()
-        env.setdefault("WANDB_PROJECT", "nalm-benchmark")
-        # Ensure each subprocess creates a fresh W&B run (no resume)
-        env.pop("WANDB_RUN_ID", None)
-        env.pop("WANDB_RESUME", None)
-        # Provide a unique, readable name
-        label = build_label(args.operation, seed, inter_rng, extra_rng)
-        env["WANDB_NAME"] = label
-
-        # Redirect child output to a dedicated log file on the network volume to keep parent logs clean
-        def sanitize(s: str) -> str:
-            return "".join(c if (c.isalnum() or c in "-_.[],") else "_" for c in s)
-
-        log_dir = Path("/runpod-volume") / "supervisor-logs" / args.operation
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        log_path = log_dir / f"{sanitize(label)}.log"
-        with open(log_path, "w", encoding="utf-8") as log_file:
-            proc = subprocess.Popen(
-                cmd,
-                env=env,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            proc.wait()
-        return (proc.returncode, f"{label} -> {log_path}", seed)
+    run_one_bound = functools.partial(
+        run_one,
+        python_exec=python_exec,
+        script_path=script_path,
+        operation=args.operation,
+        input_size=args.input_size,
+        batch_size=args.batch_size,
+        max_iterations=args.max_iterations,
+        learning_rate=args.learning_rate,
+        log_interval=args.log_interval,
+    )
 
     total = len(tasks)
-    prog = tqdm(total=total, desc=f"{args.operation} seeds×ranges")
-    # Log an initial point at step 0 to seed the chart
-    wandb.log({f"{args.operation}/launched_total": 0}, step=0, commit=True)
+    launched = 0
+    # Log initial points at step 0 to seed charts
+    wandb.wrapper.log({f"{args.operation}/launched_total": 0}, step=0, commit=True)
+    wandb.wrapper.log(
+        {
+            f"{args.operation}/completed_total": 0,
+            f"{args.operation}/completed_ok": 0,
+            f"{args.operation}/completed_failed": 0,
+        },
+        step=0,
+        commit=True,
+    )
 
+    completed_total = 0
+    completed_ok = 0
+    completed_failed = 0
     if args.concurrency <= 1:
         for t in tasks:
             # Mark as launched at submission time
             seed, inter_rng, extra_rng = t
             launch_label = build_label(args.operation, seed, inter_rng, extra_rng)
-            print(f"[supervisor] launched {launch_label}")
-            prog.update(1)
+            launched += 1
+            print(f"[supervisor] launched {launch_label} ({launched}/{total})")
             # Log with an explicit step to ensure the series renders on W&B
-            wandb.log(
-                {f"{args.operation}/launched_total": prog.n}, step=prog.n, commit=True
+            wandb.wrapper.log(
+                {f"{args.operation}/launched_total": launched},
+                step=launched,
+                commit=True,
             )
             # Run in foreground (sequential)
-            _ = run_one(t)
+            rc, msg, _seed = run_one_bound(t)
+            print(f"[supervisor] completed {msg} rc={rc}")
+            completed_total += 1
+            if rc == 0:
+                completed_ok += 1
+            else:
+                completed_failed += 1
+            log_completion(
+                args.operation,
+                launched,
+                completed_total,
+                completed_ok,
+                completed_failed,
+            )
     else:
         max_workers = max(1, int(args.concurrency))
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -184,24 +234,48 @@ def main() -> None:
             for t in tasks:
                 seed, inter_rng, extra_rng = t
                 launch_label = build_label(args.operation, seed, inter_rng, extra_rng)
-                print(f"[supervisor] launched {launch_label}")
-                prog.update(1)
-                wandb.log(
-                    {f"{args.operation}/launched_total": prog.n},
-                    step=prog.n,
+                launched += 1
+                print(f"[supervisor] launched {launch_label} ({launched}/{total})")
+                wandb.wrapper.log(
+                    {f"{args.operation}/launched_total": launched},
+                    step=launched,
                     commit=True,
                 )
-                futures.append(ex.submit(run_one, t))
-            # Optionally consume completions just to surface exceptions
+                futures.append(ex.submit(run_one_bound, t))
+            # Consume completions and log status
             for fut in concurrent.futures.as_completed(futures):
                 try:
-                    _ = fut.result()
+                    rc, msg, _seed = fut.result()
+                    print(f"[supervisor] completed {msg} rc={rc}")
+                    completed_total += 1
+                    if rc == 0:
+                        completed_ok += 1
+                    else:
+                        completed_failed += 1
+                    log_completion(
+                        args.operation,
+                        launched,
+                        completed_total,
+                        completed_ok,
+                        completed_failed,
+                    )
                 except Exception as exc:
                     print(f"[supervisor] task failed with exception: {exc}")
+                    completed_total += 1
+                    completed_failed += 1
+                    log_completion(
+                        args.operation,
+                        launched,
+                        completed_total,
+                        completed_ok,
+                        completed_failed,
+                    )
     # Record a final summary metric for quick inspection
-    wandb.run.summary[f"{args.operation}/launched_total_final"] = prog.n
-    prog.close()
-    wandb.finish()
+    wandb.run.summary[f"{args.operation}/launched_total_final"] = launched
+    wandb.run.summary[f"{args.operation}/completed_total_final"] = completed_total
+    wandb.run.summary[f"{args.operation}/completed_ok_final"] = completed_ok
+    wandb.run.summary[f"{args.operation}/completed_failed_final"] = completed_failed
+    wandb.wrapper.finish()
 
 
 if __name__ == "__main__":

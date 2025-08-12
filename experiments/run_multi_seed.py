@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+from .range_pairs import RANGE_PAIRS
+
 # Fixed configuration (kept simple on purpose)
 # OPS: List[str] = ["add", "sub", "mul", "div"]
 OPS: List[str] = ["sub"]
@@ -15,23 +17,11 @@ SEEDS: int = 25
 START_SEED: int = 0
 INPUT_SIZE: int = 2
 BATCH_SIZE: int = 128
-MAX_ITERATIONS: int = 50000
+# Temporarily set this very low so we can see completion of each pod
+MAX_ITERATIONS: int = 100
+# MAX_ITERATIONS: int = 50000
 LEARNING_RATE: float = 1e-3
 LOG_INTERVAL: int = 1000
-
-# 9 interpolation/extrapolation pairs
-# Note: row 5 uses a two-interval extrapolation.
-RANGE_PAIRS: List[Tuple[List[float], List[float] | List[List[float]]]] = [
-    ([-20.0, -10.0], [-40.0, -20.0]),
-    ([-2.0, -1.0], [-6.0, -2.0]),
-    ([-1.2, -1.1], [-6.1, -1.2]),
-    ([-0.2, -0.1], [-2.0, -0.2]),
-    ([-2.0, 2.0], [[-6.0, -2.0], [2.0, 6.0]]),
-    ([0.1, 0.2], [0.2, 2.0]),
-    ([1.0, 2.0], [2.0, 6.0]),
-    ([1.1, 1.2], [1.2, 6.0]),
-    ([10.0, 20.0], [20.0, 40.0]),
-]
 
 
 @dataclass

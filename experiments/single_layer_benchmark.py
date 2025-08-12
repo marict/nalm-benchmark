@@ -12,35 +12,16 @@ from runpod_service import stop_runpod
 import misc.utils as utils
 import stable_nalu
 import stable_nalu.functional.regualizer as Regualizer
-import wandb
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
-try:
-    # Agent/non-interactive friendly: if WANDB is not available or login cannot prompt (no TTY),
-    # fall back to disabled mode so automated runs don't crash. Local users with API keys set
-    # via shell init (e.g., ~/.zshrc) will use normal wandb.init().
-    if os.getenv("WANDB_DISABLED", "").lower() in ("1", "true") or os.getenv(
-        "WANDB_MODE", ""
-    ).lower() in (
-        "disabled",
-        "offline",
-    ):
-        wandb.init(mode="disabled")
-    else:
-        wandb.init()
-    print(
-        f"Initialized W&B, run id: {wandb.run.id}, url: {wandb.run.url}, name: {wandb.run.name}"
-    )
-except (
-    Exception
-) as _wandb_exc:  # Fallback to disabled mode if login fails (e.g., no TTY)
-    print(f"W&B disabled due to: {_wandb_exc}")
-    os.environ["WANDB_DISABLED"] = "true"
-    try:
-        wandb.init(mode="disabled")
-    except Exception:
-        pass
+from . import \
+    wandb_setup as wandb  # wandb.wrapper + wandb.run; validates env on import
+
+# W&B already initialized by import of wandb_setup
+print(
+    f"Initialized W&B, run id: {wandb.run.id}, url: {wandb.run.url}, name: {wandb.run.name}"
+)
 
 # Parse arguments
 parser = argparse.ArgumentParser(description="Runs the simple function static task")
@@ -881,7 +862,7 @@ for epoch_i, (x_train, t_train) in zip(
             print(f"t0={t0}")
             print(f"G_first_sample: {g_first}")
             print(f"O_first_sample: {o_first}")
-        wandb.log(log_dict, step=epoch_i)
+        wandb.wrapper.log(log_dict, step=epoch_i)
 
     # Optimize model
     if loss_train.requires_grad:

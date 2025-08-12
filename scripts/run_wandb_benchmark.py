@@ -9,7 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import wandb
+from experiments import \
+    wandb_setup as wandb  # exposes wandb.run and wandb.wrapper
 
 TRAIN_LINE_RE = re.compile(
     r"^train\s+(\d+):\s+([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?),\s+inter:\s+([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?),\s+extra:\s+([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?)$"
@@ -54,15 +55,17 @@ def main() -> int:
         )
         return 2
 
-    # Init wandb with fixed project/entity
-    wandb_kwargs = {
-        "project": "nalm-benchmark",
-    }
+    # W&B already initialized by import side-effect; optionally set presentation fields
     if args.name:
-        wandb_kwargs["name"] = args.name
+        try:
+            wandb.run.name = args.name
+        except Exception:
+            pass
     if args.notes:
-        wandb_kwargs["notes"] = args.notes
-    run = wandb.init(**wandb_kwargs)
+        try:
+            wandb.run.summary["notes"] = args.notes
+        except Exception:
+            pass
 
     # Build command
     cwd = Path(args.cwd)
@@ -97,7 +100,7 @@ def main() -> int:
                 train_loss = float(m.group(2))
                 inter_mse = float(m.group(3))
                 extra_mse = float(m.group(4))
-                wandb.log(
+                wandb.wrapper.log(
                     {
                         "train/mse": train_loss,
                         "valid/inter_mse": inter_mse,
@@ -113,7 +116,7 @@ def main() -> int:
             wandb.run.summary["status"] = "completed"
         else:
             wandb.run.summary["status"] = f"failed:{code}"
-        wandb.finish()
+        wandb.wrapper.finish()
     return code
 
 
