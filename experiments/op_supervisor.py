@@ -54,8 +54,10 @@ def main() -> None:
     # Be explicit about resuming the launcher-created run so logs land in the same run page.
     wandb_run_id = os.getenv("WANDB_RUN_ID")
     wandb_project = os.getenv("WANDB_PROJECT", "nalm-benchmark")
+    wandb_entity = os.getenv("WANDB_ENTITY")
     wandb.init(
         project=wandb_project,
+        entity=wandb_entity,
         id=wandb_run_id if wandb_run_id else None,
         resume="allow" if wandb_run_id else None,
         tags=["runpod", "supervisor"],

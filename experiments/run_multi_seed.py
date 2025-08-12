@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 # Fixed configuration (kept simple on purpose)
-OPS: List[str] = ["add", "sub", "mul", "div"]
+# OPS: List[str] = ["add", "sub", "mul", "div"]
+OPS: List[str] = ["sub"]
 SEEDS: int = 25
 START_SEED: int = 0
 INPUT_SIZE: int = 2
