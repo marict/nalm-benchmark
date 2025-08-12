@@ -11,7 +11,18 @@ from typing import List, Tuple
 
 from . import \
     wandb_setup as wandb  # wandb.wrapper + wandb.run; validates env on import
-from .range_pairs import RANGE_PAIRS
+
+# Robust import so this works as module inside pod regardless of cwd
+try:
+    from experiments.range_pairs import RANGE_PAIRS  # type: ignore
+except Exception:
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _PARENT = _Path(__file__).resolve().parent.parent
+    if str(_PARENT) not in _sys.path:
+        _sys.path.insert(0, str(_PARENT))
+    from experiments.range_pairs import RANGE_PAIRS  # type: ignore
 
 
 # Build a unique, readable W&B run label for a task

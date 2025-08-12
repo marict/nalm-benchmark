@@ -8,7 +8,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from .range_pairs import RANGE_PAIRS
+# Robust import so this file works both as a module and as a script
+try:
+    from experiments.range_pairs import RANGE_PAIRS  # type: ignore
+except Exception:
+    # When executed as a script: add parent directory to sys.path
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _PARENT = _Path(__file__).resolve().parent.parent
+    if str(_PARENT) not in _sys.path:
+        _sys.path.insert(0, str(_PARENT))
+    from experiments.range_pairs import RANGE_PAIRS  # type: ignore
 
 # Fixed configuration (kept simple on purpose)
 # OPS: List[str] = ["add", "sub", "mul", "div"]

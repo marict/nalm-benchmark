@@ -15,8 +15,17 @@ import stable_nalu.functional.regualizer as Regualizer
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
-from . import \
-    wandb_setup as wandb  # wandb.wrapper + wandb.run; validates env on import
+# Robust import to work both as module and as script
+try:
+    from experiments import wandb_setup as wandb  # type: ignore
+except Exception:
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _PARENT = _Path(__file__).resolve().parent.parent
+    if str(_PARENT) not in _sys.path:
+        _sys.path.insert(0, str(_PARENT))
+    from experiments import wandb_setup as wandb  # type: ignore
 
 # W&B already initialized by import of wandb_setup
 print(
