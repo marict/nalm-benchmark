@@ -91,6 +91,10 @@ def run_one(
     label = build_label(operation, seed, inter_rng, extra_rng)
     env["WANDB_NAME"] = label
 
+    # Verify that RUNPOD_POD_ID is set
+    if "RUNPOD_POD_ID" not in env:
+        raise RuntimeError("RUNPOD_POD_ID must be set in the environment")
+
     # Redirect child output to a dedicated log file on the network volume
     log_dir = Path("/runpod-volume") / "supervisor-logs" / operation
     log_dir.mkdir(parents=True, exist_ok=True)
