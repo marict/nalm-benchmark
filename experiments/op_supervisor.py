@@ -95,20 +95,15 @@ def run_one(
     if "RUNPOD_POD_ID" not in env:
         raise RuntimeError("RUNPOD_POD_ID must be set in the environment")
 
-    # Redirect child output to a dedicated log file on the network volume
-    log_dir = Path("/runpod-volume") / "supervisor-logs" / operation
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"{sanitize_label(label)}.log"
-    with open(log_path, "w", encoding="utf-8") as log_file:
-        proc = subprocess.Popen(
-            cmd,
-            env=env,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        proc.wait()
-    return (proc.returncode, f"{label} -> {log_path}", seed)
+    # Stream child output to supervisor stdout/stderr (no redirection)
+    print(f"Running {cmd} in env {env}")
+    proc = subprocess.Popen(
+        cmd,
+        env=env,
+        text=True,
+    )
+    proc.wait()
+    return (proc.returncode, label, seed)
 
 
 def main() -> None:
@@ -126,7 +121,8 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=1)
 
     args = parser.parse_args()
-    wandb.init_wandb()
+    run = wandb.init_wandb()
+    print(f"Initialized W&B, run id: {run.id}, url: {run.url}, name: {run.name}")
 
     # Resolve path to single_layer_benchmark.py robustly inside the pod
     here = Path(__file__).resolve()
@@ -209,7 +205,7 @@ def main() -> None:
                 commit=True,
             )
             # Run in foreground (sequential)
-            rc, msg, _seed = run_one_bound(t)
+            rc, msg, _ = run_one_bound(t)
             print(f"[supervisor] completed {msg} rc={rc}")
             completed_total += 1
             if rc == 0:
