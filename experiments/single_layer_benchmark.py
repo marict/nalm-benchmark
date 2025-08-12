@@ -18,7 +18,7 @@ from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
 run = wandb.init_wandb(
-    project="nalm-benchmark",
+    local_project="nalm-benchmark",
     placeholder_name=f"single-layer-benchmark-{int(time.time())}",
 )
 
