@@ -26,7 +26,7 @@ def _parse_tags(raw: str | None) -> List[str]:
 
 def _init_wandb() -> wandb.sdk.wandb_run.Run:
     api_key = os.getenv("WANDB_API_KEY")
-    project = os.getenv("WANDB_PROJECT")
+    project = os.getenv("WANDB_PROJECT", "nalm-benchmark")
     entity = os.getenv("WANDB_ENTITY")
 
     if not api_key:
