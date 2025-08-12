@@ -120,7 +120,9 @@ class DAGLayer(ExtendedTorchModule):
         # Numerical guards
         self._mag_min = 1e-6
         self._mag_max = 1e28
-        self._log_lim = 100.0
+        # Limit exponent to avoid overflow in float32 (exp(88) ~ 1.65e38, close to f32 max)
+        # We choose 80 to provide headroom on MPS/float32 while remaining ample for float64.
+        self._log_lim = 80.0
 
     def reset_parameters(self) -> None:
         # Reinitialize prediction heads
@@ -178,10 +180,14 @@ class DAGLayer(ExtendedTorchModule):
         return G_step * linear_mag + (1.0 - G_step) * log_mag_result
 
     def _fail_if_nan(self, name: str, tensor: torch.Tensor) -> None:
-        if torch.isnan(tensor).any():
+        # Keep legacy name but treat any non-finite as an error for clearer debugging
+        if not torch.isfinite(tensor).all():
             idx = torch.nonzero(torch.isnan(tensor), as_tuple=False)[0].tolist()
+            max_val = torch.nanmax(tensor)
+            min_val = torch.nanmin(tensor)
             raise ValueError(
-                f"NaN detected in {name} at index {idx}; shape={tuple(tensor.shape)}"
+                f"Non-finite detected in {name} (NaN/Inf). First-NaN index={idx}; "
+                f"min={float(min_val)}, max={float(max_val)}; shape={tuple(tensor.shape)}"
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:

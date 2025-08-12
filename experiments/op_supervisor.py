@@ -51,7 +51,16 @@ def main() -> None:
     args = parser.parse_args()
 
     # Initialize W&B to log supervisor progress into the pod's run (WANDB_RUN_ID provided by launcher)
-    wandb.init(tags=["runpod", "supervisor"], notes=f"op={args.operation}")
+    # Be explicit about resuming the launcher-created run so logs land in the same run page.
+    wandb_run_id = os.getenv("WANDB_RUN_ID")
+    wandb_project = os.getenv("WANDB_PROJECT", "nalm-benchmark")
+    wandb.init(
+        project=wandb_project,
+        id=wandb_run_id if wandb_run_id else None,
+        resume="allow" if wandb_run_id else None,
+        tags=["runpod", "supervisor"],
+        notes=f"op={args.operation}",
+    )
 
     # Resolve path to single_layer_benchmark.py robustly inside the pod
     here = Path(__file__).resolve()
@@ -150,7 +159,8 @@ def main() -> None:
 
     total = len(tasks)
     prog = tqdm(total=total, desc=f"{args.operation} seeds×ranges")
-    wandb.log({f"{args.operation}/launched_total": 0})
+    # Log an initial point at step 0 to seed the chart
+    wandb.log({f"{args.operation}/launched_total": 0}, step=0, commit=True)
 
     if args.concurrency <= 1:
         for t in tasks:
@@ -159,7 +169,10 @@ def main() -> None:
             launch_label = build_label(args.operation, seed, inter_rng, extra_rng)
             print(f"[supervisor] launched {launch_label}")
             prog.update(1)
-            wandb.log({f"{args.operation}/launched_total": prog.n})
+            # Log with an explicit step to ensure the series renders on W&B
+            wandb.log(
+                {f"{args.operation}/launched_total": prog.n}, step=prog.n, commit=True
+            )
             # Run in foreground (sequential)
             _ = run_one(t)
     else:
@@ -171,7 +184,11 @@ def main() -> None:
                 launch_label = build_label(args.operation, seed, inter_rng, extra_rng)
                 print(f"[supervisor] launched {launch_label}")
                 prog.update(1)
-                wandb.log({f"{args.operation}/launched_total": prog.n})
+                wandb.log(
+                    {f"{args.operation}/launched_total": prog.n},
+                    step=prog.n,
+                    commit=True,
+                )
                 futures.append(ex.submit(run_one, t))
             # Optionally consume completions just to surface exceptions
             for fut in concurrent.futures.as_completed(futures):
@@ -179,6 +196,8 @@ def main() -> None:
                     _ = fut.result()
                 except Exception as exc:
                     print(f"[supervisor] task failed with exception: {exc}")
+    # Record a final summary metric for quick inspection
+    wandb.run.summary[f"{args.operation}/launched_total_final"] = prog.n
     prog.close()
     wandb.finish()
 
