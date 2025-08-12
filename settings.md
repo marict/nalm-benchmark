@@ -158,7 +158,7 @@ Notes for RunPod:
 Alternatively, launch via the dedicated service script (reads args or env):
 
 ```bash
-python3 scripts/runpod_service.py \
+python3 scripts/runpod_launcher.py \
   --wandb-api-key "$WANDB_API_KEY" \
   --run-name dag-mul-in4-bs1000 \
   --no-cuda \
