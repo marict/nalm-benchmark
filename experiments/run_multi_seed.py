@@ -44,19 +44,15 @@ def _parse_final_metrics(stdout_text: str) -> Tuple[float | None, float | None, 
         if "loss_valid_inter:" in ln:
             # Extract the value after the colon
             parts = ln.split(":")
-            if len(parts) >= 2:
-                try:
-                    inter_val = float(parts[1].strip())
-                except ValueError:
-                    pass
+            if len(parts) < 2:
+                raise ValueError(f"Malformed 'loss_valid_inter' line: {ln}")
+            inter_val = float(parts[1].strip())
         if "loss_valid_extra:" in ln:
             # Extract the value after the colon
             parts = ln.split(":")
-            if len(parts) >= 2:
-                try:
-                    extra_val = float(parts[1].strip())
-                except ValueError:
-                    pass
+            if len(parts) < 2:
+                raise ValueError(f"Malformed 'loss_valid_extra' line: {ln}")
+            extra_val = float(parts[1].strip())
     return inter_val, extra_val, early_stopped
 
 
