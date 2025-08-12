@@ -17,13 +17,10 @@ import stable_nalu.functional.regualizer as Regualizer
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
-if wandb.are_local():
-    run = wandb.init_wandb_local(
-        project="nalm-benchmark",
-        placeholder_name=f"single-layer-benchmark-{int(time.time())}",
-    )
-else:
-    run = wandb.init_wandb_runpod()
+run = wandb.init_wandb(
+    project="nalm-benchmark",
+    placeholder_name=f"single-layer-benchmark-{int(time.time())}",
+)
 
 # Parse arguments
 parser = argparse.ArgumentParser(description="Runs the simple function static task")

@@ -122,7 +122,7 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=1)
 
     args = parser.parse_args()
-    wandb.init_wandb_runpod()
+    wandb.init_wandb()
 
     # Resolve path to single_layer_benchmark.py robustly inside the pod
     here = Path(__file__).resolve()
