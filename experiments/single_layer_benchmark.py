@@ -917,8 +917,6 @@ print(f"  - loss_valid_extra: {loss_valid_extra}")
 print()
 utils.print_model_params(model)
 
-stop_runpod()
-
 if not args.no_save:
     model.writer._root.close()  # fix - close summary writer before saving model to avoid thread locking issues
     # Use saved weights to visualize the intermediate values.
