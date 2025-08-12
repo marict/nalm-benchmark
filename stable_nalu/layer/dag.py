@@ -61,7 +61,7 @@ class DAGLayer(ExtendedTorchModule):
         self,
         in_features: int,
         out_features: int,
-        writer=None,
+        writer: str = None,
         name: str | None = None,
         dag_depth: int | None = None,
         freeze_g_linear: bool = False,
@@ -136,8 +136,6 @@ class DAGLayer(ExtendedTorchModule):
         nn.init.zeros_(self.G_head.bias)
         nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.output_selector_head.bias)
-
-    # Legacy mappings removed in simplified path
 
     @staticmethod
     def _ste_round(values: torch.Tensor) -> torch.Tensor:
