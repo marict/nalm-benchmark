@@ -3,6 +3,7 @@ import ast
 import math
 import os
 import random
+import time
 from decimal import Decimal
 
 import numpy as np
@@ -16,10 +17,13 @@ import stable_nalu.functional.regualizer as Regualizer
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
-# W&B already initialized by import of wandb_setup
-print(
-    f"Initialized W&B, run id: {wandb.run.id}, url: {wandb.run.url}, name: {wandb.run.name}"
-)
+if wandb.are_local():
+    run = wandb.init_wandb_local(
+        project="nalm-benchmark",
+        placeholder_name=f"single-layer-benchmark-{int(time.time())}",
+    )
+else:
+    run = wandb.init_wandb_runpod()
 
 # Parse arguments
 parser = argparse.ArgumentParser(description="Runs the simple function static task")
@@ -139,7 +143,6 @@ parser.add_argument(
     default=False,
     help="Use a very simple dataset with t = sum(v[0:2]) + sum(v[4:6])",
 )
-
 parser.add_argument(
     "--hidden-size",
     action="store",
@@ -310,7 +313,6 @@ parser.add_argument(
     default=False,
     help="Should network measures (e.g. gates) and gradients be shown",
 )
-
 parser.add_argument(
     "--reg-scale-type",
     action="store",

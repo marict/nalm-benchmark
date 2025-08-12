@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
-import runpod_service.wandb_setup as wandb  # type: ignore
+import runpod_service.wandb_setup as wandb
 
 from experiments.range_pairs import RANGE_PAIRS
 
@@ -122,15 +122,7 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=1)
 
     args = parser.parse_args()
-
-    # Strict env checks: require WANDB context to be present on the pod
-    wandb_api_key = os.getenv("WANDB_API_KEY")
-    if not wandb_api_key:
-        raise RuntimeError("WANDB_API_KEY must be set in the environment.")
-    wandb_entity = os.getenv("WANDB_ENTITY")
-    if not wandb_entity:
-        raise RuntimeError("WANDB_ENTITY must be set in the environment.")
-    # W&B already initialized by import side-effect; if WANDB_RUN_ID set, this import attached to the same run
+    wandb.init_wandb_runpod()
 
     # Resolve path to single_layer_benchmark.py robustly inside the pod
     here = Path(__file__).resolve()
@@ -271,10 +263,10 @@ def main() -> None:
                         completed_failed,
                     )
     # Record a final summary metric for quick inspection
-    wandb.run.summary[f"{args.operation}/launched_total_final"] = launched
-    wandb.run.summary[f"{args.operation}/completed_total_final"] = completed_total
-    wandb.run.summary[f"{args.operation}/completed_ok_final"] = completed_ok
-    wandb.run.summary[f"{args.operation}/completed_failed_final"] = completed_failed
+    wandb.wrapper.summary[f"{args.operation}/launched_total_final"] = launched
+    wandb.wrapper.summary[f"{args.operation}/completed_total_final"] = completed_total
+    wandb.wrapper.summary[f"{args.operation}/completed_ok_final"] = completed_ok
+    wandb.wrapper.summary[f"{args.operation}/completed_failed_final"] = completed_failed
     wandb.wrapper.finish()
 
 
