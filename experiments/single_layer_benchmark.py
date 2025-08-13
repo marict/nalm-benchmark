@@ -649,7 +649,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     npu_Wr_init=args.npu_Wr_init,
     nru_div_mode=args.nru_div_mode,
     realnpu_reg_type=args.realnpu_reg_type,
-    dag_depth=args.num_subsets + 1,
+    dag_depth=1,  # ONLY WORKS IF INPUT SIZE = 2 and NUM_SUBSETS = 2
 )
 model.reset_parameters()
 if args.cuda:

@@ -61,13 +61,13 @@ class DAGLayer(ExtendedTorchModule):
         self,
         in_features: int,
         out_features: int,
+        dag_depth: int,
         writer: str = None,
         name: str | None = None,
-        dag_depth: int | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
         use_ste_G: bool = True,  # Always on
-        use_attention_selector: bool = False,
+        use_attention_selector: bool = True,
         selector_dim: int = 32,
         use_positional_encoding: bool = False,
         **kwargs,
@@ -83,7 +83,7 @@ class DAGLayer(ExtendedTorchModule):
         self.out_features = out_features
 
         # Since our input is a single vector, we only need one step.
-        self.dag_depth = int(dag_depth) if dag_depth is not None else 1
+        self.dag_depth = dag_depth
         self.num_initial_nodes = in_features
         self.total_nodes = self.num_initial_nodes + self.dag_depth
 
