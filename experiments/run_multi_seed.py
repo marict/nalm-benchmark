@@ -23,7 +23,6 @@ BATCH_SIZE: int = 128
 # MAX_ITERATIONS: int = 1000
 MAX_ITERATIONS: int = 50000
 LEARNING_RATE: float = 1e-3
-LR_MIN: float = 1e-5
 LOG_INTERVAL: int = 100
 
 
