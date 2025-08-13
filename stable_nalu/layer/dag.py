@@ -67,7 +67,7 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
         use_ste_G: bool = True,  # Always on
-        use_attention_selector: bool = True,
+        use_attention_selector: bool = False,
         selector_dim: int = 32,
         use_positional_encoding: bool = False,
         **kwargs,
