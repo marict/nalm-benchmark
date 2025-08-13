@@ -19,7 +19,7 @@ from stable_nalu.layer.dag import DAGLayer
 
 run = wandb.init_wandb(
     local_project="nalm-benchmark",
-    placeholder_name=f"single-layer-benchmark-{int(time.time())}",
+    placeholder_name=f"local-run-{int(time.time())}",
 )
 
 # Parse arguments
@@ -258,24 +258,17 @@ parser.add_argument(
     help="Specify the learning-rate",
 )
 parser.add_argument(
-    "--lr-step",
+    "--lr-cosine",
     action="store_true",
     default=False,
-    help="Enable stepwise LR decay (StepLR)",
+    help="Use cosine LR decay from --learning-rate to --lr-min over --max-iterations",
 )
 parser.add_argument(
     "--lr-min",
     action="store",
     default=1e-6,
     type=float,
-    help="Target final learning rate when --lr-step is set",
-)
-parser.add_argument(
-    "--lr-step-count",
-    action="store",
-    default=5,
-    type=int,
-    help="Number of uniform LR decay steps across max-iterations when --lr-step is set",
+    help="Minimum learning rate for cosine decay",
 )
 parser.add_argument(
     "--momentum",
@@ -666,23 +659,11 @@ elif args.optimizer == "sgd":
 else:
     raise ValueError(f"{args.optimizer} is not a valid optimizer algorithm")
 
-# Optional stepwise LR schedule (uniform over training duration)
-if args.lr_step:
-    # Derive a uniform step interval from max-iterations and desired step count
-    step_count = max(1, int(args.lr_step_count))
-    step_size = max(1, int(args.max_iterations // step_count))
-    # Compute gamma to reach lr_min from learning_rate in exactly step_count steps
-    initial_lr = float(args.learning_rate)
-    target_lr = float(args.lr_min)
-    if target_lr <= 0:
-        target_lr = 1e-12
-    # Ensure monotonic non-increase; if lr_min >= lr_start, use gamma=1.0 (no decay)
-    if target_lr >= initial_lr:
-        gamma = 1.0
-    else:
-        gamma = (target_lr / initial_lr) ** (1.0 / float(step_count))
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer, step_size=step_size, gamma=gamma
+# Optional cosine LR schedule over training duration
+if args.lr_cosine:
+    eta_min = max(0.0, float(args.lr_min))
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=int(args.max_iterations), eta_min=eta_min
     )
 else:
     scheduler = None
@@ -859,6 +840,13 @@ for epoch_i, (x_train, t_train) in zip(
             print(f"t0={t0}")
             print(f"G_first_sample: {g_first}")
             print(f"O_first_sample: {o_first}")
+            if getattr(dag, "use_output_selector", False) and hasattr(
+                dag, "_last_out_logits"
+            ):
+                out_logits0 = dag._last_out_logits[0].detach().cpu().tolist()
+                values0 = dag._last_value_vec_inter[0].detach().cpu().tolist()
+                print(f"out_logits_first_sample: {out_logits0}")
+                print(f"value_vec_inter_first_sample: {values0}")
         wandb.wrapper.log(log_dict, step=epoch_i)
 
     # Optimize model

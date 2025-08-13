@@ -67,9 +67,10 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
         use_ste_G: bool = True,  # Always on
-        use_attention_selector: bool = False,
+        use_attention_selector: bool = True,
         selector_dim: int = 32,
-        use_positional_encoding: bool = False,
+        use_positional_encoding: bool = True,
+        use_output_selector: bool = True,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
@@ -120,6 +121,11 @@ class DAGLayer(ExtendedTorchModule):
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
 
+        # Optional output selector over intermediate nodes (length == dag_depth)
+        self.use_output_selector = bool(use_output_selector)
+        if self.use_output_selector:
+            self.output_selector_head = nn.Linear(in_features, self.dag_depth)
+
         # Initialize heads similar to standard small heads
         if self.O_head is not None:
             nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
@@ -133,6 +139,9 @@ class DAGLayer(ExtendedTorchModule):
         # no extra heads
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
+        if self.use_output_selector:
+            nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.output_selector_head.bias)
 
         # Numerical guards
         self._mag_min = 1e-6
@@ -160,6 +169,9 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
+        if self.use_output_selector:
+            nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.output_selector_head.bias)
         # No output selector head; output is always the last node
 
     @staticmethod
@@ -324,9 +336,26 @@ class DAGLayer(ExtendedTorchModule):
             working_mag = working_mag.scatter(-1, index_tensor, V_mag_new)
             working_sign = working_sign.scatter(-1, index_tensor, V_sign_new)
 
-        # Final output: use the last node
-        final_idx = self.total_nodes - 1
-        final_value = working_sign[:, final_idx] * working_mag[:, final_idx]
+        # Final output: either last node or optional selector over intermediate nodes
+        if self.use_output_selector:
+            # Logits over intermediate nodes only (shape: (B, dag_depth))
+            out_logits = self.output_selector_head(head_input).to(dtype)
+            self._fail_if_nan("out_logits (output selector)", out_logits)
+
+            # Values for intermediate nodes slice [in_features : total_nodes) -> shape (B, dag_depth)
+            value_vec_inter = (working_sign * working_mag)[:, self.num_initial_nodes :]
+            # Expose for external logging
+            self._last_out_logits = out_logits.detach()
+            self._last_value_vec_inter = value_vec_inter.detach()
+            if not self.training:
+                idx = torch.argmax(out_logits, dim=-1, keepdim=True)  # (B,1)
+                final_value = value_vec_inter.gather(-1, idx).squeeze(-1)
+            else:
+                probs = torch.softmax(out_logits, dim=-1)
+                final_value = torch.sum(probs * value_vec_inter, dim=-1)
+        else:
+            final_idx = self.total_nodes - 1
+            final_value = working_sign[:, final_idx] * working_mag[:, final_idx]
 
         self._fail_if_nan("final_value", final_value)
 

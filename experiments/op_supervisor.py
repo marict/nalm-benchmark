@@ -52,7 +52,7 @@ def run_one(
     batch_size: int,
     max_iterations: int,
     learning_rate: float,
-    lr_step: bool,
+    lr_cosine: bool,
     lr_min: float,
     log_interval: int,
 ) -> Tuple[int, str, int]:
@@ -82,8 +82,8 @@ def run_one(
         "--seed",
         str(seed),
     ]
-    if lr_step and lr_min is not None:
-        cmd += ["--lr-step", "--lr-min", str(lr_min)]
+    if lr_cosine and lr_min is not None:
+        cmd += ["--lr-cosine", "--lr-min", str(lr_min)]
 
     env = os.environ.copy()
     env.setdefault("WANDB_PROJECT", "nalm-benchmark")
@@ -125,6 +125,7 @@ def main() -> None:
     parser.add_argument("--max-iterations", type=int, required=True)
     parser.add_argument("--learning-rate", type=float, required=True)
     parser.add_argument("--lr-min", type=float, required=False, default=None)
+    parser.add_argument("--lr-cosine", action="store_true", default=False)
     parser.add_argument("--log-interval", type=int, required=True)
     parser.add_argument("--start-seed", type=int, default=0)
     parser.add_argument("--num-seeds", type=int, default=25)
@@ -185,9 +186,7 @@ def main() -> None:
         for inter_rng, extra_rng in RANGE_PAIRS:
             tasks.append((seed, inter_rng, extra_rng))
 
-    lr_step = False
-    if args.lr_min is not None:
-        lr_step = True
+    lr_cosine = bool(args.lr_cosine)
 
     run_one_bound = functools.partial(
         run_one,
@@ -198,7 +197,7 @@ def main() -> None:
         batch_size=args.batch_size,
         max_iterations=args.max_iterations,
         learning_rate=args.learning_rate,
-        lr_step=lr_step,
+        lr_cosine=lr_cosine,
         lr_min=args.lr_min,
         log_interval=args.log_interval,
     )
