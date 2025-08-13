@@ -54,6 +54,8 @@ def run_one(
     batch_size: int,
     max_iterations: int,
     learning_rate: float,
+    lr_step: bool,
+    lr_min: float,
     log_interval: int,
 ) -> Tuple[int, str, int]:
     seed, inter_rng, extra_rng = task
@@ -73,6 +75,9 @@ def run_one(
         str(max_iterations),
         "--learning-rate",
         str(learning_rate),
+        "--lr-step" if lr_step else "",
+        "--lr-min" if lr_min is not None else "",
+        str(lr_min) if lr_min is not None else "",
         "--log-interval",
         str(log_interval),
         "--interpolation-range",
@@ -121,6 +126,7 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, required=True)
     parser.add_argument("--max-iterations", type=int, required=True)
     parser.add_argument("--learning-rate", type=float, required=True)
+    parser.add_argument("--lr-min", type=float, required=True)
     parser.add_argument("--log-interval", type=int, required=True)
     parser.add_argument("--start-seed", type=int, default=0)
     parser.add_argument("--num-seeds", type=int, default=25)
@@ -168,6 +174,10 @@ def main() -> None:
         for inter_rng, extra_rng in RANGE_PAIRS:
             tasks.append((seed, inter_rng, extra_rng))
 
+    lr_step = False
+    if args.lr_min is not None:
+        lr_step = True
+
     run_one_bound = functools.partial(
         run_one,
         python_exec=python_exec,
@@ -177,6 +187,8 @@ def main() -> None:
         batch_size=args.batch_size,
         max_iterations=args.max_iterations,
         learning_rate=args.learning_rate,
+        lr_step=lr_step,
+        lr_min=args.lr_min,
         log_interval=args.log_interval,
     )
 
