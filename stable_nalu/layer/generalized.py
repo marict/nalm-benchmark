@@ -6,8 +6,7 @@ from ..abstract import ExtendedTorchModule
 from .basic import BasicCell, BasicLayer
 from .dag import DAGLayer
 from .gradient_bandit_nac import GradientBanditNACCell, GradientBanditNACLayer
-from .gradient_bandit_nalu import (GradientBanditNALUCell,
-                                   GradientBanditNALULayer)
+from .gradient_bandit_nalu import GradientBanditNALUCell, GradientBanditNALULayer
 from .gumbel_mnac import GumbelMNACCell, GumbelMNACLayer
 from .gumbel_nac import GumbelNACCell, GumbelNACLayer
 from .gumbel_nalu import GumbelNALUCell, GumbelNALULayer
@@ -17,8 +16,7 @@ from .independent_nac import IndependentNACCell, IndependentNACLayer
 from .independent_nalu import IndependentNALUCell, IndependentNALULayer
 from .linear_nac import LinearNACCell, LinearNACLayer
 from .linear_nalu import LinearNALUCell, LinearNALULayer
-from .mcfc import (MCFullyConnected, MulMCFC, MulMCFCSignINALU,
-                   MulMCFCSignRealNPU)
+from .mcfc import MCFullyConnected, MulMCFC, MulMCFCSignINALU, MulMCFCSignRealNPU
 from .mnac import MNACCell, MNACLayer
 from .nac import NACCell, NACLayer
 from .nalu import NALUCell, NALULayer
@@ -26,22 +24,29 @@ from .npu import NPULayer
 from .npu_real import RealNPULayer
 from .pos_nac import PosNACCell, PosNACLayer
 from .pos_nalu import PosNALUCell, PosNALULayer
-from .re_regualized_linear_mnac import (ReRegualizedLinearMNACCell,
-                                        ReRegualizedLinearMNACLayer)
-from .re_regualized_linear_nac import (ReRegualizedLinearNACCell,
-                                       ReRegualizedLinearNACLayer)
-from .re_regualized_linear_nalu import (ReRegualizedLinearNALUCell,
-                                        ReRegualizedLinearNALULayer)
-from .re_regualized_linear_pos_nac import (ReRegualizedLinearPosNACCell,
-                                           ReRegualizedLinearPosNACLayer)
-from .regualized_linear_mnac import (RegualizedLinearMNACCell,
-                                     RegualizedLinearMNACLayer)
-from .regualized_linear_nac import (RegualizedLinearNACCell,
-                                    RegualizedLinearNACLayer)
-from .regualized_linear_nalu import (RegualizedLinearNALUCell,
-                                     RegualizedLinearNALULayer)
-from .silly_re_regualized_linear_mnac import (SillyReRegualizedLinearMNACCell,
-                                              SillyReRegualizedLinearMNACLayer)
+from .re_regualized_linear_mnac import (
+    ReRegualizedLinearMNACCell,
+    ReRegualizedLinearMNACLayer,
+)
+from .re_regualized_linear_nac import (
+    ReRegualizedLinearNACCell,
+    ReRegualizedLinearNACLayer,
+)
+from .re_regualized_linear_nalu import (
+    ReRegualizedLinearNALUCell,
+    ReRegualizedLinearNALULayer,
+)
+from .re_regualized_linear_pos_nac import (
+    ReRegualizedLinearPosNACCell,
+    ReRegualizedLinearPosNACLayer,
+)
+from .regualized_linear_mnac import RegualizedLinearMNACCell, RegualizedLinearMNACLayer
+from .regualized_linear_nac import RegualizedLinearNACCell, RegualizedLinearNACLayer
+from .regualized_linear_nalu import RegualizedLinearNALUCell, RegualizedLinearNALULayer
+from .silly_re_regualized_linear_mnac import (
+    SillyReRegualizedLinearMNACCell,
+    SillyReRegualizedLinearMNACLayer,
+)
 from .softmax_nac import SoftmaxNACCell, SoftmaxNACLayer
 from .softmax_nalu import SoftmaxNALUCell, SoftmaxNALULayer
 

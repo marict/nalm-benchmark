@@ -4,8 +4,7 @@ import os
 import sys
 
 import stable_nalu
-from stable_nalu.reader.tensorboard_metric_reader import \
-    _everything_default_matcher
+from stable_nalu.reader.tensorboard_metric_reader import _everything_default_matcher
 
 # Parse arguments
 parser = argparse.ArgumentParser(description="Export results from simple function task")

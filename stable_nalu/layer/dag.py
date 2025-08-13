@@ -68,12 +68,12 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_log: bool = False,
         use_ste_G: bool = True,  # Always on
         use_attention_selector: bool = True,
-        selector_dim: int = 32,
+        selector_dim: int = 256,  # Seems highly correlated with div grokking
         use_positional_encoding: bool = True,
         use_output_selector: bool = True,
         **kwargs,
     ) -> None:
-        super().__init__("dag", writer=writer, name=name, **kwargs)
+        super().__init__("dag", writers=writer, name=name, **kwargs)
 
         if out_features != 1:
             raise ValueError(

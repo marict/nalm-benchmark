@@ -4,8 +4,9 @@ import os
 import numpy as np
 import torch
 import torch.utils.data
-from scipy.stats import \
-    truncnorm  # must be at least version 1.6.2 (otherwise sampling implementation is too slow)
+from scipy.stats import (
+    truncnorm,
+)  # must be at least version 1.6.2 (otherwise sampling implementation is too slow)
 
 from ._dataloader import FastDataLoader
 
