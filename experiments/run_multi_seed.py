@@ -18,7 +18,8 @@ SEEDS = 1
 # SEEDS: int = 25
 START_SEED: int = 0
 INPUT_SIZE: int = 2
-BATCH_SIZE: int = 128
+# BATCH_SIZE: int = 128
+BATCHS_SIZE: int = 1024  # This was working well for me locally
 # Temporarily set this very low so we can see completion of each pod
 # MAX_ITERATIONS: int = 1000
 MAX_ITERATIONS: int = 50000
