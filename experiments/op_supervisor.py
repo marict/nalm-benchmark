@@ -126,7 +126,7 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, required=True)
     parser.add_argument("--max-iterations", type=int, required=True)
     parser.add_argument("--learning-rate", type=float, required=True)
-    parser.add_argument("--lr-min", type=float, required=True)
+    parser.add_argument("--lr-min", type=float, required=False, default=None)
     parser.add_argument("--log-interval", type=int, required=True)
     parser.add_argument("--start-seed", type=int, default=0)
     parser.add_argument("--num-seeds", type=int, default=25)
