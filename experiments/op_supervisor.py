@@ -75,9 +75,6 @@ def run_one(
         str(max_iterations),
         "--learning-rate",
         str(learning_rate),
-        "--lr-step" if lr_step else "",
-        "--lr-min" if lr_min is not None else "",
-        str(lr_min) if lr_min is not None else "",
         "--log-interval",
         str(log_interval),
         "--interpolation-range",
@@ -87,6 +84,8 @@ def run_one(
         "--seed",
         str(seed),
     ]
+    if lr_step and lr_min is not None:
+        cmd += ["--lr-step", "--lr-min", str(lr_min)]
     env = os.environ.copy()
     env.setdefault("WANDB_PROJECT", "nalm-benchmark")
     # Ensure each subprocess creates a fresh W&B run (no resume)
@@ -132,9 +131,22 @@ def main() -> None:
     parser.add_argument("--num-seeds", type=int, default=25)
     parser.add_argument("--concurrency", type=int, default=1)
 
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
     run = wandb.init_wandb()
     print(f"Initialized W&B, run id: {run.id}, url: {run.url}, name: {run.name}")
+    if unknown:
+        try:
+            wandb.wrapper.log(
+                {
+                    "supervisor/argparse_error": 1,
+                    "supervisor/unknown_args": " ".join(unknown),
+                },
+                commit=True,
+            )
+            wandb.wrapper.run.summary["argparse_unknown"] = unknown
+        finally:
+            wandb.wrapper.finish()
+        raise SystemExit(f"Unknown arguments for op_supervisor: {unknown}")
 
     # Resolve path to single_layer_benchmark.py robustly inside the pod
     here = Path(__file__).resolve()
@@ -217,6 +229,14 @@ def main() -> None:
                 completed_ok += 1
             else:
                 completed_failed += 1
+                wandb.wrapper.log(
+                    {
+                        f"{args.operation}/child_failed": 1,
+                        "supervisor/last_failure": f"{msg} rc={rc}",
+                    },
+                    commit=True,
+                )
+
             log_completion(
                 args.operation,
                 launched,
@@ -247,6 +267,13 @@ def main() -> None:
                         completed_ok += 1
                     else:
                         completed_failed += 1
+                        wandb.wrapper.log(
+                            {
+                                f"{args.operation}/child_failed": 1,
+                                "supervisor/last_failure": f"{msg} rc={rc}",
+                            },
+                            commit=True,
+                        )
                     log_completion(
                         args.operation,
                         launched,
