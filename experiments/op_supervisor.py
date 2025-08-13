@@ -89,7 +89,7 @@ def run_one(
     env.pop("WANDB_RESUME", None)
     # Provide a unique, readable name
     label = build_label(operation, seed, inter_rng, extra_rng)
-    env["WANDB_NAME"] = label
+    env["POD_NAME"] = label
 
     # Verify that RUNPOD_POD_ID is set
     if "RUNPOD_POD_ID" not in env:
@@ -182,17 +182,6 @@ def main() -> None:
 
     total = len(tasks)
     launched = 0
-    # Log initial points at step 0 to seed charts
-    wandb.wrapper.log({f"{args.operation}/launched_total": 0}, step=0, commit=True)
-    wandb.wrapper.log(
-        {
-            f"{args.operation}/completed_total": 0,
-            f"{args.operation}/completed_ok": 0,
-            f"{args.operation}/completed_failed": 0,
-        },
-        step=0,
-        commit=True,
-    )
 
     completed_total = 0
     completed_ok = 0
@@ -204,11 +193,9 @@ def main() -> None:
             launch_label = build_label(args.operation, seed, inter_rng, extra_rng)
             launched += 1
             print(f"[supervisor] launched {launch_label} ({launched}/{total})")
-            # Log with an explicit step to ensure the series renders on W&B
+            # Let W&B handle steps
             wandb.wrapper.log(
-                {f"{args.operation}/launched_total": launched},
-                step=launched,
-                commit=True,
+                {f"{args.operation}/launched_total": launched}, commit=True
             )
             # Run in foreground (sequential)
             rc, msg, _ = run_one_bound(t)
@@ -235,9 +222,7 @@ def main() -> None:
                 launched += 1
                 print(f"[supervisor] launched {launch_label} ({launched}/{total})")
                 wandb.wrapper.log(
-                    {f"{args.operation}/launched_total": launched},
-                    step=launched,
-                    commit=True,
+                    {f"{args.operation}/launched_total": launched}, commit=True
                 )
                 futures.append(ex.submit(run_one_bound, t))
             # Consume completions and log status
