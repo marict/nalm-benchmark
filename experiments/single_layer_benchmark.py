@@ -410,6 +410,12 @@ parser.add_argument(
     type=int,
     help="Log to tensorboard every X epochs.",
 )
+parser.add_argument(
+    "--early-stopping",
+    action="store_true",
+    default=True,
+    help="Enable early stopping when both inter/extra are below threshold",
+)
 
 parser.add_argument(
     "--clip-grad-norm",
@@ -738,16 +744,17 @@ for epoch_i, (x_train, t_train) in zip(
     if epoch_i % args.log_interval == 0:
         interpolation_error = test_model(dataset_valid_interpolation_data)
         extrapolation_error = test_model(dataset_test_extrapolation_data)
-        # Early stopping if both errors are extremely low
-        _es_thr = 1e-10
-        if (
-            float(interpolation_error.detach().cpu().item()) < _es_thr
-            and float(extrapolation_error.detach().cpu().item()) < _es_thr
-        ):
-            print(
-                f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error:.10f}"
-            )
-            break
+        if args.early_stopping:
+            # Early stopping if both errors are extremely low
+            _es_thr = 1e-10
+            if (
+                float(interpolation_error.detach().cpu().item()) < _es_thr
+                and float(extrapolation_error.detach().cpu().item()) < _es_thr
+            ):
+                print(
+                    f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error:.10f}"
+                )
+                break
 
     # forward
     y_train = model(x_train)
