@@ -20,9 +20,10 @@ START_SEED: int = 0
 INPUT_SIZE: int = 2
 BATCH_SIZE: int = 128
 # Temporarily set this very low so we can see completion of each pod
-MAX_ITERATIONS: int = 1000
-# MAX_ITERATIONS: int = 50000
+# MAX_ITERATIONS: int = 1000
+MAX_ITERATIONS: int = 50000
 LEARNING_RATE: float = 1e-3
+LR_MIN: float = 1e-5
 LOG_INTERVAL: int = 100
 
 
@@ -150,6 +151,9 @@ def _run_op_on_runpod(repo_root: Path, op_name: str) -> None:
         str(LEARNING_RATE),
         "--log-interval",
         str(LOG_INTERVAL),
+        "--lr-step",
+        "--lr-min",
+        str(LR_MIN),
         "--start-seed",
         str(START_SEED),
         "--num-seeds",
