@@ -67,7 +67,9 @@ class DAGLayer(ExtendedTorchModule):
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
         use_ste_G: bool = True,  # Always on
-        use_output_selector: bool = False,
+        use_attention_selector: bool = False,
+        selector_dim: int = 32,
+        use_positional_encoding: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writer=writer, name=name, **kwargs)
@@ -80,17 +82,14 @@ class DAGLayer(ExtendedTorchModule):
         self.in_features = in_features
         self.out_features = out_features
 
-        # Execution graph sizing: initial nodes come num subsets
-        self.dag_depth = (
-            int(dag_depth) if dag_depth is not None else max(1, in_features - 1)
-        )
+        # Since our input is a single vector, we only need one step.
+        self.dag_depth = int(dag_depth) if dag_depth is not None else 1
         self.num_initial_nodes = in_features
         self.total_nodes = self.num_initial_nodes + self.dag_depth
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
         self.use_ste_G = bool(use_ste_G)
-        self.use_output_selector = bool(use_output_selector)
 
         # Always-on normalizations for stability
         self.input_norm = nn.LayerNorm(in_features)
@@ -98,24 +97,42 @@ class DAGLayer(ExtendedTorchModule):
         self.O_norm = nn.LayerNorm(self.total_nodes)
 
         # Small prediction head mapping input -> selector logits
-        self.O_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
+        self.use_attention_selector = bool(use_attention_selector)
+        self.selector_dim = int(selector_dim)
+        self.use_positional_encoding = bool(use_positional_encoding)
+        if self.use_attention_selector:
+            # Attention-style selector: queries from input per step, keys are learned node embeddings
+            self.W_q = nn.Linear(in_features, self.dag_depth * self.selector_dim)
+            self.node_keys = nn.Parameter(
+                torch.empty(self.total_nodes, self.selector_dim)
+            )
+            if self.use_positional_encoding:
+                # Learned step embeddings added to each step query
+                self.step_pos_embed = nn.Parameter(
+                    torch.empty(self.dag_depth, self.selector_dim)
+                )
+            self.O_head = None
+        else:
+            self.O_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
         self.O_pos_head = None
         self.O_neg_head = None
 
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
 
-        # Optional final output selector over intermediate nodes only (length == dag_depth)
-        self.output_selector_head = nn.Linear(in_features, self.dag_depth)
-
         # Initialize heads similar to standard small heads
-        nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
-        nn.init.zeros_(self.O_head.bias)
+        if self.O_head is not None:
+            nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.O_head.bias)
+        if self.use_attention_selector:
+            nn.init.normal_(self.W_q.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.W_q.bias)
+            nn.init.normal_(self.node_keys, mean=0.0, std=0.02)
+            if self.use_positional_encoding:
+                nn.init.normal_(self.step_pos_embed, mean=0.0, std=0.02)
         # no extra heads
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
-        nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
-        nn.init.zeros_(self.output_selector_head.bias)
 
         # Numerical guards
         self._mag_min = 1e-6
@@ -126,8 +143,15 @@ class DAGLayer(ExtendedTorchModule):
 
     def reset_parameters(self) -> None:
         # Reinitialize prediction heads
-        nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
-        nn.init.zeros_(self.O_head.bias)
+        if self.O_head is not None:
+            nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.O_head.bias)
+        if self.use_attention_selector:
+            nn.init.normal_(self.W_q.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.W_q.bias)
+            nn.init.normal_(self.node_keys, mean=0.0, std=0.02)
+            if self.use_positional_encoding:
+                nn.init.normal_(self.step_pos_embed, mean=0.0, std=0.02)
         if self.O_pos_head is not None:
             nn.init.normal_(self.O_pos_head.weight, mean=0.0, std=0.02)
             nn.init.zeros_(self.O_pos_head.bias)
@@ -136,8 +160,7 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.O_neg_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.G_head.bias)
-        nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
-        nn.init.zeros_(self.output_selector_head.bias)
+        # No output selector head; output is always the last node
 
     @staticmethod
     def _ste_round(values: torch.Tensor) -> torch.Tensor:
@@ -220,8 +243,19 @@ class DAGLayer(ExtendedTorchModule):
         self._fail_if_nan("head_input", head_input)
 
         # Soft selector with temperature; O in [-1,1]
-        O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
-        L = O_flat.view(B, self.dag_depth, self.total_nodes)
+        if self.use_attention_selector:
+            # Queries per step: (B, dag_depth, selector_dim)
+            q = self.W_q(head_input).view(B, self.dag_depth, self.selector_dim)
+            if self.use_positional_encoding:
+                # Broadcast add: (B, S, D) + (S, D) -> (B, S, D)
+                q = q + self.step_pos_embed
+            # Keys: (total_nodes, selector_dim)
+            k = self.node_keys  # (N, D)
+            # logits: (B, dag_depth, total_nodes)
+            L = torch.einsum("bsd,nd->bsn", q, k) / (float(self.selector_dim) ** 0.5)
+        else:
+            O_flat = self.O_head(head_input)  # (B, dag_depth * total_nodes)
+            L = O_flat.view(B, self.dag_depth, self.total_nodes)
         if self.O_norm is not None:
             L = self.O_norm(L)
         L = L.to(dtype)
@@ -290,26 +324,9 @@ class DAGLayer(ExtendedTorchModule):
             working_mag = working_mag.scatter(-1, index_tensor, V_mag_new)
             working_sign = working_sign.scatter(-1, index_tensor, V_sign_new)
 
-        # Final output: either last node or optional selector over intermediate nodes
-        if self.use_output_selector:
-            # Logits over intermediate nodes only (shape: (B, dag_depth))
-            out_logits = self.output_selector_head(head_input).to(dtype)
-            self._fail_if_nan("out_logits (output selector)", out_logits)
-
-            # Values for intermediate nodes slice [in_features : total_nodes) -> shape (B, dag_depth)
-            value_vec_inter = (working_sign * working_mag)[:, self.num_initial_nodes :]
-            if not self.training:
-                idx = torch.argmax(
-                    out_logits, dim=-1, keepdim=True
-                )  # (B,1) over dag_depth
-                final_value = value_vec_inter.gather(-1, idx).squeeze(-1)
-            else:
-                probs = torch.softmax(out_logits, dim=-1)
-                final_value = torch.sum(probs * value_vec_inter, dim=-1)
-        else:
-            # Default: use the last node
-            final_idx = self.total_nodes - 1
-            final_value = working_sign[:, final_idx] * working_mag[:, final_idx]
+        # Final output: use the last node
+        final_idx = self.total_nodes - 1
+        final_value = working_sign[:, final_idx] * working_mag[:, final_idx]
 
         self._fail_if_nan("final_value", final_value)
 

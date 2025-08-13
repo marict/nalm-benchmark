@@ -32,14 +32,12 @@ def log_completion(
     completed_ok: int,
     completed_failed: int,
 ) -> None:
-    step_val = int(launched_count + completed_total)
     wandb.wrapper.log(
         {
             f"{operation}/completed_total": completed_total,
             f"{operation}/completed_ok": completed_ok,
             f"{operation}/completed_failed": completed_failed,
         },
-        step=step_val,
         commit=True,
     )
 
@@ -133,7 +131,7 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=1)
 
     args, unknown = parser.parse_known_args()
-    run = wandb.init_wandb()
+    run = wandb.init_wandb_runpod()
     print(f"Initialized W&B, run id: {run.id}, url: {run.url}, name: {run.name}")
     if unknown:
         try:
@@ -300,10 +298,10 @@ def main() -> None:
                 except Exception:
                     pass
     # Record a final summary metric for quick inspection
-    wandb.wrapper.summary[f"{args.operation}/launched_total_final"] = launched
-    wandb.wrapper.summary[f"{args.operation}/completed_total_final"] = completed_total
-    wandb.wrapper.summary[f"{args.operation}/completed_ok_final"] = completed_ok
-    wandb.wrapper.summary[f"{args.operation}/completed_failed_final"] = completed_failed
+    run.summary[f"{args.operation}/launched_total_final"] = launched
+    run.summary[f"{args.operation}/completed_total_final"] = completed_total
+    run.summary[f"{args.operation}/completed_ok_final"] = completed_ok
+    run.summary[f"{args.operation}/completed_failed_final"] = completed_failed
     wandb.wrapper.finish()
 
 
