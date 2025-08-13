@@ -12,7 +12,7 @@ from experiments.range_pairs import RANGE_PAIRS
 
 # Fixed configuration (kept simple on purpose)
 # OPS: List[str] = ["add", "sub", "mul", "div"]
-OPS: List[str] = ["sub"]
+OPS: List[str] = ["div"]
 # Temporarily set this very low so we can see completion of each pod
 SEEDS = 1
 # SEEDS: int = 25
