@@ -86,6 +86,7 @@ def run_one(
     ]
     if lr_step and lr_min is not None:
         cmd += ["--lr-step", "--lr-min", str(lr_min)]
+
     env = os.environ.copy()
     env.setdefault("WANDB_PROJECT", "nalm-benchmark")
     # Ensure each subprocess creates a fresh W&B run (no resume)
