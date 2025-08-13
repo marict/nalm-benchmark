@@ -20,10 +20,10 @@ START_SEED: int = 0
 INPUT_SIZE: int = 2
 BATCH_SIZE: int = 128
 # Temporarily set this very low so we can see completion of each pod
-MAX_ITERATIONS: int = 100
+MAX_ITERATIONS: int = 1000
 # MAX_ITERATIONS: int = 50000
 LEARNING_RATE: float = 1e-3
-LOG_INTERVAL: int = 1000
+LOG_INTERVAL: int = 100
 
 
 @dataclass
