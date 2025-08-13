@@ -9,8 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from experiments import \
-    wandb_setup as wandb  # exposes wandb.run and wandb.wrapper
+import runpod_service.wandb_setup as wandb
 
 TRAIN_LINE_RE = re.compile(
     r"^train\s+(\d+):\s+([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?),\s+inter:\s+([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?),\s+extra:\s+([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?)$"
