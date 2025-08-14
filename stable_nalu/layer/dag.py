@@ -284,7 +284,7 @@ class DAGLayer(ExtendedTorchModule):
         L = L.to(dtype)
         self._fail_if_nan("L (selector logits)", L)
         sign = torch.tanh(L)
-        mag = torch.sigmoid(torch.abs(L))
+        mag = torch.sigmoid(L)
         O = sign * mag
         self._fail_if_nan("O (selector)", O)
         G_logits = self.G_head(head_input)  # (B, dag_depth)
