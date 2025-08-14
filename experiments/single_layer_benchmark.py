@@ -830,6 +830,7 @@ for epoch_i, (x_train, t_train) in zip(
         "loss/train": float(loss_train_criterion.detach().cpu().item()),
         "mse/inter": float(interpolation_error.detach().cpu().item()),
         "mse/extra": float(extrapolation_error.detach().cpu().item()),
+        "lr": float(scheduler.get_last_lr()[0]) if scheduler is not None else None,
     }
     if dag is not None:
         log_dict["mean/G"] = float(dag._last_G.cpu().mean().item())

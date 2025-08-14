@@ -93,9 +93,9 @@ class DAGLayer(ExtendedTorchModule):
         self.use_ste_G = bool(use_ste_G)
 
         # Always-on normalizations for stability
-        self.input_norm = nn.LayerNorm(in_features, eps=1e-3)
-        self.head_norm = nn.LayerNorm(in_features, eps=1e-3)
-        self.O_norm = nn.LayerNorm(self.total_nodes, eps=1e-3)
+        self.input_norm = nn.LayerNorm(in_features, eps=1e-3, elementwise_affine=False)
+        self.head_norm = nn.LayerNorm(in_features, eps=1e-3, elementwise_affine=False)
+        self.O_norm = nn.LayerNorm(self.total_nodes, eps=1e-3, elementwise_affine=False)
 
         # Small prediction head mapping input -> selector logits
         self.use_attention_selector = bool(use_attention_selector)
