@@ -17,6 +17,30 @@ import stable_nalu.functional.regualizer as Regualizer
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
+
+class NoOpScheduler:
+    """A scheduler that does nothing - always returns the initial learning rate."""
+
+    def __init__(self, optimizer):
+        self.optimizer = optimizer
+
+    def step(self):
+        """Do nothing when stepping."""
+        pass
+
+    def get_last_lr(self):
+        """Return the current learning rates from the optimizer."""
+        return [group["lr"] for group in self.optimizer.param_groups]
+
+    def state_dict(self):
+        """Return empty state dict."""
+        return {}
+
+    def load_state_dict(self, state_dict):
+        """Do nothing when loading state dict."""
+        pass
+
+
 run = wandb.init_wandb(
     local_project="nalm-benchmark",
     placeholder_name=f"local-run-{int(time.time())}",
@@ -666,7 +690,7 @@ if args.lr_cosine:
         optimizer, T_max=int(args.max_iterations), eta_min=eta_min
     )
 else:
-    scheduler = None
+    scheduler = NoOpScheduler(optimizer)
 
 
 def test_model(data):
@@ -746,25 +770,22 @@ for epoch_i, (x_train, t_train) in zip(
             )
             wandb.wrapper.log({"early_stopped": 1}, step=epoch_i)
             run.summary["early_stopped"] = True
-            # Also evaluate the current training batch under eval mode (clamped)
-            train_eval_error = test_model((x_train, t_train))
-            print(f"train_eval (clamped) at stop: {train_eval_error:.10f}")
-            wandb.wrapper.log(
-                {"mse/train_eval": float(train_eval_error.detach().cpu().item())},
-                step=epoch_i,
-            )
             break
+
+    assert model.training
+
+    # Per-step clamped (eval-mode) training MSE; not used for backprop
+    train_eval_error = test_model((x_train, t_train))
+    log_dict = {
+        "mse/train_eval": float(train_eval_error.detach().cpu().item()),
+    }
+
+    assert model.training
 
     # forward
     y_train = model(x_train)
-    # Per-step clamped (eval-mode) training MSE; not used for backprop
-    train_eval_error = test_model((x_train, t_train))
-    wandb.wrapper.log(
-        {"mse/train_eval": float(train_eval_error.detach().cpu().item())},
-        step=epoch_i,
-    )
-    regualizers = model.regualizer()  # logs 3 reg metrics to tensorbord if verbose
 
+    regualizers = model.regualizer()
     if args.regualizer_scaling == "linear":
         r_w_scale = max(
             0,
@@ -823,19 +844,16 @@ for epoch_i, (x_train, t_train) in zip(
     loss_train = loss_train_criterion + loss_train_regualizer
     dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
 
-    # Log the loss
-    if args.verbose or epoch_i % args.log_interval == 0:
-        pass
-    log_dict = {
-        "loss/train": float(loss_train_criterion.detach().cpu().item()),
-        "mse/inter": float(interpolation_error.detach().cpu().item()),
-        "mse/extra": float(extrapolation_error.detach().cpu().item()),
-        "lr": float(scheduler.get_last_lr()[0]) if scheduler is not None else None,
-    }
+    log_dict["loss/train"] = float(loss_train_criterion.detach().cpu().item())
+    log_dict["mse/inter"] = float(interpolation_error.detach().cpu().item())
+    log_dict["mse/extra"] = float(extrapolation_error.detach().cpu().item())
+    log_dict["lr"] = float(scheduler.get_last_lr()[0])
     if dag is not None:
         log_dict["mean/G"] = float(dag._last_G.cpu().mean().item())
         o_l1_mean = float(dag._last_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
+    # Log every iteration, log interval is just for printing
+    wandb.wrapper.log(log_dict)
     if epoch_i % args.log_interval == 0:
         print(
             "train %d: %.10f, inter: %.10f, extra: %.10f"
@@ -860,7 +878,6 @@ for epoch_i, (x_train, t_train) in zip(
                 values0 = dag._last_value_vec_inter[0].detach().cpu().tolist()
                 print(f"out_logits_first_sample: {out_logits0}")
                 print(f"value_vec_inter_first_sample: {values0}")
-        wandb.wrapper.log(log_dict, step=epoch_i)
 
     # Optimize model
     if loss_train.requires_grad:
@@ -870,8 +887,7 @@ for epoch_i, (x_train, t_train) in zip(
         if args.clip_grad_value != None:
             torch.nn.utils.clip_grad_value_(model.parameters(), args.clip_grad_value)
         optimizer.step()
-        if scheduler is not None:
-            scheduler.step()
+        scheduler.step()
     model.optimize(loss_train_criterion)
 
     # Log gradients if in verbose mode
@@ -880,10 +896,10 @@ for epoch_i, (x_train, t_train) in zip(
         # model.log_gradient_elems()
 
     """
-    inalu reinit conditions: 
-    - every 10th epoch (and not the first epoch) where the number of stored errors is over 5,000. 
-    - if the average err value of the first half of the errors is less than the 2nd half + sdev and the avg loss of the 
-    latter half is larger than 1 
+    inalu reinit conditions:
+    - every 10th epoch (and not the first epoch) where the number of stored errors is over 5,000.
+    - if the average err value of the first half of the errors is less than the 2nd half + sdev and the avg loss of the
+    latter half is larger than 1
     """
     if args.reinit:
         epoch_losses.append(interpolation_error)

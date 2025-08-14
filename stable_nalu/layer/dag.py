@@ -66,10 +66,11 @@ class DAGLayer(ExtendedTorchModule):
         name: str | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
+        use_ste_sign: bool = False,
         use_ste_G: bool = True,  # Always on
         use_attention_selector: bool = True,
         selector_dim: int = 256,  # Seems highly correlated with div grokking
-        use_positional_encoding: bool = True,
+        use_positional_encoding: bool = False,
         use_output_selector: bool = True,
         **kwargs,
     ) -> None:
@@ -91,11 +92,12 @@ class DAGLayer(ExtendedTorchModule):
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
         self.use_ste_G = bool(use_ste_G)
+        self.use_ste_sign = bool(use_ste_sign)
 
         # Always-on normalizations for stability
-        self.input_norm = nn.LayerNorm(in_features, eps=1e-3, elementwise_affine=False)
-        self.head_norm = nn.LayerNorm(in_features, eps=1e-3, elementwise_affine=False)
-        self.O_norm = nn.LayerNorm(self.total_nodes, eps=1e-3, elementwise_affine=False)
+        self.input_norm = nn.LayerNorm(in_features)
+        self.head_norm = nn.LayerNorm(in_features)
+        self.O_norm = nn.LayerNorm(self.total_nodes)
 
         # Small prediction head mapping input -> selector logits
         self.use_attention_selector = bool(use_attention_selector)
@@ -283,8 +285,15 @@ class DAGLayer(ExtendedTorchModule):
             L = self.O_norm(L)
         L = L.to(dtype)
         self._fail_if_nan("L (selector logits)", L)
-        sign = torch.tanh(L)
+        sign = torch.tanh(L / 4)
         mag = torch.sigmoid(L)
+        if self.training and self.use_ste_sign:
+            hard = torch.where(
+                sign >= 0,
+                torch.tensor(1.0, adevice=sign.device, dtype=sign.dtype),
+                torch.tensor(-1.0, device=sign.device, dtype=sign.dtype),
+            )
+            sign = hard + (sign - sign.detach())
         O = sign * mag
         self._fail_if_nan("O (selector)", O)
         G_logits = self.G_head(head_input)  # (B, dag_depth)
