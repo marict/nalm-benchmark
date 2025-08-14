@@ -81,8 +81,6 @@ def run_one(
         str(extra_rng),
         "--seed",
         str(seed),
-        "--early-stopping",
-        "False",
     ]
     if lr_cosine and lr_min is not None:
         cmd += ["--lr-cosine", "--lr-min", str(lr_min)]
