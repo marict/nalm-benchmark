@@ -55,6 +55,7 @@ def run_one(
     lr_cosine: bool,
     lr_min: float,
     log_interval: int,
+    clip_grad_norm: float | None,
 ) -> Tuple[int, str, int]:
     seed, inter_rng, extra_rng = task
     cmd: List[str] = [
@@ -84,6 +85,8 @@ def run_one(
     ]
     if lr_cosine and lr_min is not None:
         cmd += ["--lr-cosine", "--lr-min", str(lr_min)]
+    if clip_grad_norm is not None:
+        cmd += ["--clip-grad-norm", str(clip_grad_norm)]
 
     env = os.environ.copy()
     env.setdefault("WANDB_PROJECT", "nalm-benchmark")
@@ -127,6 +130,7 @@ def main() -> None:
     parser.add_argument("--lr-min", type=float, required=False, default=None)
     parser.add_argument("--lr-cosine", action="store_true", default=False)
     parser.add_argument("--log-interval", type=int, required=True)
+    parser.add_argument("--clip-grad-norm", type=float, required=False, default=1.0)
     parser.add_argument("--start-seed", type=int, default=0)
     parser.add_argument("--num-seeds", type=int, default=25)
     parser.add_argument("--concurrency", type=int, default=1)
@@ -200,6 +204,7 @@ def main() -> None:
         lr_cosine=lr_cosine,
         lr_min=args.lr_min,
         log_interval=args.log_interval,
+        clip_grad_norm=args.clip_grad_norm,
     )
 
     total = len(tasks)
