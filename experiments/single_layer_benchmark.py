@@ -740,15 +740,19 @@ for epoch_i, (x_train, t_train) in zip(
         extrapolation_error = test_model(dataset_test_extrapolation_data)
         # Early stopping if both errors are extremely low
         _es_thr = 1e-10
-        if (
-            float(interpolation_error.detach().cpu().item()) < _es_thr
-            and float(extrapolation_error.detach().cpu().item()) < _es_thr
-        ):
+        if float(interpolation_error.detach().cpu().item()) < _es_thr:
             print(
                 f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error:.10f}"
             )
             wandb.wrapper.log({"early_stopped": 1}, step=epoch_i)
             run.summary["early_stopped"] = True
+            # Also evaluate the current training batch under eval mode (clamped)
+            train_eval_error = test_model((x_train, t_train))
+            print(f"train_eval (clamped) at stop: {train_eval_error:.10f}")
+            wandb.wrapper.log(
+                {"mse/train_eval": float(train_eval_error.detach().cpu().item())},
+                step=epoch_i,
+            )
             break
 
     # forward
