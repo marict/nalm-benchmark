@@ -216,13 +216,24 @@ class DAGLayer(ExtendedTorchModule):
 
     def _fail_if_nan(self, name: str, tensor: torch.Tensor) -> None:
         # Keep legacy name but treat any non-finite as an error for clearer debugging
-        if not torch.isfinite(tensor).all():
-            idx = torch.nonzero(torch.isnan(tensor), as_tuple=False)[0].tolist()
-            max_val = torch.nanmax(tensor)
-            min_val = torch.nanmin(tensor)
+        finite_mask = torch.isfinite(tensor)
+        if not finite_mask.all():
+            bad_idx = torch.nonzero(~finite_mask, as_tuple=False)
+            first_bad = bad_idx[0].tolist() if bad_idx.numel() > 0 else []
+            finite_vals = tensor[finite_mask]
+            min_val = (
+                float(finite_vals.min().item())
+                if finite_vals.numel() > 0
+                else float("nan")
+            )
+            max_val = (
+                float(finite_vals.max().item())
+                if finite_vals.numel() > 0
+                else float("nan")
+            )
             raise ValueError(
-                f"Non-finite detected in {name} (NaN/Inf). First-NaN index={idx}; "
-                f"min={float(min_val)}, max={float(max_val)}; shape={tuple(tensor.shape)}"
+                f"Non-finite detected in {name} (NaN/Inf). First-bad index={first_bad}; "
+                f"min_finite={min_val}, max_finite={max_val}; shape={tuple(tensor.shape)}"
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
