@@ -757,6 +757,12 @@ for epoch_i, (x_train, t_train) in zip(
 
     # forward
     y_train = model(x_train)
+    # Per-step clamped (eval-mode) training MSE; not used for backprop
+    train_eval_error = test_model((x_train, t_train))
+    wandb.wrapper.log(
+        {"mse/train_eval": float(train_eval_error.detach().cpu().item())},
+        step=epoch_i,
+    )
     regualizers = model.regualizer()  # logs 3 reg metrics to tensorbord if verbose
 
     if args.regualizer_scaling == "linear":
