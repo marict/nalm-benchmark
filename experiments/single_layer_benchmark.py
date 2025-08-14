@@ -738,7 +738,7 @@ for epoch_i, (x_train, t_train) in zip(
     if epoch_i % args.log_interval == 0:
         interpolation_error = test_model(dataset_valid_interpolation_data)
         extrapolation_error = test_model(dataset_test_extrapolation_data)
-        # Early stopping if both errors are extremely low
+        # Early stopping if interpolation error is extremely low
         _es_thr = 1e-10
         if float(interpolation_error.detach().cpu().item()) < _es_thr:
             print(
