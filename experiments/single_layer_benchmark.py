@@ -673,7 +673,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     npu_Wr_init=args.npu_Wr_init,
     nru_div_mode=args.nru_div_mode,
     realnpu_reg_type=args.realnpu_reg_type,
-    dag_depth=args.num_subsets + 1,
+    dag_depth=args.num_subsets,
     use_O_scalar=args.use_O_scalar,
 )
 model.reset_parameters()
@@ -714,7 +714,7 @@ def test_model(data):
 print(model)
 print()
 # only print inits of small models
-utils.print_model_params(model) if args.input_size <= 10 else None
+# utils.print_model_params(model) if args.input_size <= 10 else None
 print()
 
 use_npu_scaling = (
@@ -766,18 +766,16 @@ for epoch_i, (x_train, t_train) in zip(
     optimizer.zero_grad()
     log_dict = {}
 
-    # Log validation
-    if epoch_i % args.log_interval == 0:
-        interpolation_error = test_model(dataset_valid_interpolation_data)
-        extrapolation_error = test_model(dataset_test_extrapolation_data)
-        # Early stopping if interpolation error is extremely low
-        _es_thr = 1e-10
-        if float(interpolation_error.detach().cpu().item()) < _es_thr:
-            print(
-                f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error:.10f}"
-            )
-            log_dict["early_stopped"] = 1
-            early_stop = True
+    # Run tests and check for early stoppage
+    interpolation_error = test_model(dataset_valid_interpolation_data)
+    extrapolation_error = test_model(dataset_test_extrapolation_data)
+    _es_thr = 1e-10
+    if float(interpolation_error.detach().cpu().item()) < _es_thr:
+        print(
+            f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error:.10f}"
+        )
+        log_dict["early_stopped"] = 1
+        early_stop = True
 
     assert model.training
 
@@ -878,18 +876,22 @@ for epoch_i, (x_train, t_train) in zip(
             t0 = float(t_train[0].detach().cpu().view(-1)[0].item())
             g_first = dag._last_G[0].detach().cpu().tolist()
             o_first = dag._last_O[0].detach().cpu().tolist()
-            print(f"x0={x0}")
-            print(f"y0={y0}")
-            print(f"t0={t0}")
-            print(f"G_first_sample: {g_first}")
-            print(f"O_first_sample: {o_first}")
+            print("First sample statistics:")
+            print(f"x0={[round(x, 5) for x in x0]}")
+            print(f"y0={round(y0, 5)}")
+            print(f"t0={round(t0, 5)}")
+            print(f"G: {[round(g, 5) for g in g_first]}")
+            print("O:")
+            for step_idx, step_values in enumerate(o_first):
+                rounded_values = [round(v, 5) for v in step_values]
+                print(f"  Step {step_idx}: {rounded_values}")
             if getattr(dag, "use_output_selector", False) and hasattr(
                 dag, "_last_out_logits"
             ):
                 out_logits0 = dag._last_out_logits[0].detach().cpu().tolist()
                 values0 = dag._last_value_vec_inter[0].detach().cpu().tolist()
-                print(f"out_logits_first_sample: {out_logits0}")
-                print(f"value_vec_inter_first_sample: {values0}")
+                print(f"out_logits: {[round(v, 5) for v in out_logits0]}")
+                print(f"value_vec_inter: {[round(v, 5) for v in values0]}")
 
     if early_stop:
         print(f"Early stopped at step {epoch_i}")
