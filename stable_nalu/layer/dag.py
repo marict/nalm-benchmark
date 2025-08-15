@@ -225,12 +225,20 @@ class DAGLayer(ExtendedTorchModule):
             finite_mask = torch.isfinite(tensor)
             bad_idx = torch.nonzero(~finite_mask, as_tuple=False)
             first_bad = bad_idx[0].tolist() if bad_idx.numel() > 0 else []
-            
+
             # Get min/max of finite values only
             finite_vals = tensor[finite_mask]
-            min_val = float(finite_vals.min().item()) if finite_vals.numel() > 0 else float("nan")
-            max_val = float(finite_vals.max().item()) if finite_vals.numel() > 0 else float("nan")
-            
+            min_val = (
+                float(finite_vals.min().item())
+                if finite_vals.numel() > 0
+                else float("nan")
+            )
+            max_val = (
+                float(finite_vals.max().item())
+                if finite_vals.numel() > 0
+                else float("nan")
+            )
+
             print(
                 f"Non-finite detected in '{name}' (NaN/Inf). First-bad index={first_bad}; "
                 f"min_finite={min_val}, max_finite={max_val}; shape={tuple(tensor.shape)}"
@@ -280,7 +288,7 @@ class DAGLayer(ExtendedTorchModule):
 
         O_mask = self.O_mask.to(dtype).to(device)
         L = L * O_mask.unsqueeze(0)
-        
+
         self._is_nan("L (selector logits)", L)
         sign = torch.tanh(L)
         mag = torch.sigmoid(torch.abs(L))
