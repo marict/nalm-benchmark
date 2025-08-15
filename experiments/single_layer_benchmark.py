@@ -712,9 +712,7 @@ def test_model(data):
 
 # Train model
 print(model)
-print("")
-print("no-tb-writer")
-print("")
+print()
 # only print inits of small models
 utils.print_model_params(model) if args.input_size <= 10 else None
 print()
@@ -757,14 +755,16 @@ if args.reinit:
     epoch_losses = []
     reinit_counter = 0
 
+early_stop = False
 for epoch_i, (x_train, t_train) in zip(
     range(resume_epoch, args.max_iterations + 1), dataset_train
 ):
     summary_writer.set_iteration(epoch_i)
 
     # Prepear model
-    model.set_parameter("tau", max(0.5, math.exp(-1e-5 * epoch_i)))
+    # model.set_parameter("tau", max(0.5, math.exp(-1e-5 * epoch_i)))
     optimizer.zero_grad()
+    log_dict = {}
 
     # Log validation
     if epoch_i % args.log_interval == 0:
@@ -776,36 +776,14 @@ for epoch_i, (x_train, t_train) in zip(
             print(
                 f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error:.10f}"
             )
-
-            # Log final O scalar metrics if enabled
-            dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
-            if dag is not None and getattr(dag, "use_O_scalar", False):
-                wandb.wrapper.log(
-                    {
-                        "early_stopped": 1,
-                        "dag/scale_S_final": float(dag.learnable_scale_S.item()),
-                        "dag/mean_scalar_final": (
-                            float(dag._last_scalar.mean().item())
-                            if hasattr(dag, "_last_scalar")
-                            and dag._last_scalar is not None
-                            else 0.0
-                        ),
-                    },
-                    step=epoch_i,
-                )
-            else:
-                wandb.wrapper.log({"early_stopped": 1}, step=epoch_i)
-
-            run.summary["early_stopped"] = True
-            break
+            log_dict["early_stopped"] = 1
+            early_stop = True
 
     assert model.training
 
     # Per-step clamped (eval-mode) training MSE; not used for backprop
     train_eval_error = test_model((x_train, t_train))
-    log_dict = {
-        "mse/train_eval": float(train_eval_error.detach().cpu().item()),
-    }
+    log_dict["mse/train_eval"] = float(train_eval_error.detach().cpu().item())
 
     assert model.training
 
@@ -886,8 +864,9 @@ for epoch_i, (x_train, t_train) in zip(
             if hasattr(dag, "_last_scalar") and dag._last_scalar is not None:
                 log_dict["dag/mean_scalar"] = float(dag._last_scalar.mean().item())
     # Log every iteration, log interval is just for printing
+    # If we early stopped, print the final metrics
     wandb.wrapper.log(log_dict)
-    if epoch_i % args.log_interval == 0:
+    if epoch_i % args.log_interval == 0 or early_stop:
         print(
             "train %d: %.10f, inter: %.10f, extra: %.10f"
             % (epoch_i, loss_train_criterion, interpolation_error, extrapolation_error)
@@ -911,6 +890,10 @@ for epoch_i, (x_train, t_train) in zip(
                 values0 = dag._last_value_vec_inter[0].detach().cpu().tolist()
                 print(f"out_logits_first_sample: {out_logits0}")
                 print(f"value_vec_inter_first_sample: {values0}")
+
+    if early_stop:
+        print(f"Early stopped at step {epoch_i}")
+        break
 
     # Optimize model
     if loss_train.requires_grad:
@@ -955,20 +938,6 @@ for epoch_i, (x_train, t_train) in zip(
 loss_valid_inter = test_model(dataset_valid_interpolation_data)
 loss_valid_extra = test_model(dataset_test_extrapolation_data)
 
-# Log final O scalar metrics if enabled
-dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
-if dag is not None and getattr(dag, "use_O_scalar", False):
-    wandb.wrapper.log(
-        {
-            "dag/scale_S_final": float(dag.learnable_scale_S.item()),
-            "dag/mean_scalar_final": (
-                float(dag._last_scalar.mean().item())
-                if hasattr(dag, "_last_scalar") and dag._last_scalar is not None
-                else 0.0
-            ),
-        }
-    )
-
 # Write results for this training
 print(f"finished:")
 if args.reinit:
@@ -979,7 +948,8 @@ print(f"  - loss_train_criterion: {loss_train_criterion}")
 print(f"  - loss_valid_inter: {loss_valid_inter}")
 print(f"  - loss_valid_extra: {loss_valid_extra}")
 print()
-utils.print_model_params(model)
+# Skip printing model params for now
+# utils.print_model_params(model)
 
 if not args.no_save:
     model.writer._root.close()  # fix - close summary writer before saving model to avoid thread locking issues
