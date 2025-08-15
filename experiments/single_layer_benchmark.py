@@ -493,6 +493,13 @@ parser.add_argument(
     help="Reinitialization only occurs if the avg accumulated loss is greater than this threshold.",
 )
 
+parser.add_argument(
+    "--use-O-scalar",
+    action="store_true",
+    default=False,
+    help="Use O scalar system for DAG layer (experimental)",
+)
+
 args = parser.parse_args()
 
 
@@ -667,6 +674,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     nru_div_mode=args.nru_div_mode,
     realnpu_reg_type=args.realnpu_reg_type,
     dag_depth=args.num_subsets + 1,
+    use_O_scalar=args.use_O_scalar,
 )
 model.reset_parameters()
 if args.cuda:
@@ -768,7 +776,26 @@ for epoch_i, (x_train, t_train) in zip(
             print(
                 f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error:.10f}"
             )
-            wandb.wrapper.log({"early_stopped": 1}, step=epoch_i)
+
+            # Log final O scalar metrics if enabled
+            dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
+            if dag is not None and getattr(dag, "use_O_scalar", False):
+                wandb.wrapper.log(
+                    {
+                        "early_stopped": 1,
+                        "dag/scale_S_final": float(dag.learnable_scale_S.item()),
+                        "dag/mean_scalar_final": (
+                            float(dag._last_scalar.mean().item())
+                            if hasattr(dag, "_last_scalar")
+                            and dag._last_scalar is not None
+                            else 0.0
+                        ),
+                    },
+                    step=epoch_i,
+                )
+            else:
+                wandb.wrapper.log({"early_stopped": 1}, step=epoch_i)
+
             run.summary["early_stopped"] = True
             break
 
@@ -852,6 +879,12 @@ for epoch_i, (x_train, t_train) in zip(
         log_dict["mean/G"] = float(dag._last_G.cpu().mean().item())
         o_l1_mean = float(dag._last_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
+
+        # Log O scalar metrics if enabled
+        if getattr(dag, "use_O_scalar", False):
+            log_dict["dag/scale_S"] = float(dag.learnable_scale_S.item())
+            if hasattr(dag, "_last_scalar") and dag._last_scalar is not None:
+                log_dict["dag/mean_scalar"] = float(dag._last_scalar.mean().item())
     # Log every iteration, log interval is just for printing
     wandb.wrapper.log(log_dict)
     if epoch_i % args.log_interval == 0:
@@ -921,6 +954,20 @@ for epoch_i, (x_train, t_train) in zip(
 # Compute validation loss
 loss_valid_inter = test_model(dataset_valid_interpolation_data)
 loss_valid_extra = test_model(dataset_test_extrapolation_data)
+
+# Log final O scalar metrics if enabled
+dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
+if dag is not None and getattr(dag, "use_O_scalar", False):
+    wandb.wrapper.log(
+        {
+            "dag/scale_S_final": float(dag.learnable_scale_S.item()),
+            "dag/mean_scalar_final": (
+                float(dag._last_scalar.mean().item())
+                if hasattr(dag, "_last_scalar") and dag._last_scalar is not None
+                else 0.0
+            ),
+        }
+    )
 
 # Write results for this training
 print(f"finished:")

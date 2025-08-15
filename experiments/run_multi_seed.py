@@ -155,6 +155,7 @@ def _run_op_on_runpod(repo_root: Path, op_name: str) -> None:
         str(LOG_INTERVAL),
         "--clip-grad-norm",
         "1.0",
+        "--use-O-scalar",  # Enable O scalar for DAG layer
         "--start-seed",
         str(START_SEED),
         "--num-seeds",

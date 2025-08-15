@@ -70,8 +70,9 @@ class DAGLayer(ExtendedTorchModule):
         use_ste_G: bool = True,  # Always on
         use_attention_selector: bool = True,
         selector_dim: int = 256,  # Seems highly correlated with div grokking
-        use_positional_encoding: bool = False,
+        use_positional_encoding: bool = True,
         use_output_selector: bool = True,
+        use_O_scalar: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -98,6 +99,7 @@ class DAGLayer(ExtendedTorchModule):
         self.input_norm = nn.LayerNorm(in_features)
         self.head_norm = nn.LayerNorm(in_features)
         self.O_norm = nn.LayerNorm(self.total_nodes)
+        self.use_O_scalar = bool(use_O_scalar)
 
         # Small prediction head mapping input -> selector logits
         self.use_attention_selector = bool(use_attention_selector)
@@ -117,8 +119,11 @@ class DAGLayer(ExtendedTorchModule):
             self.O_head = None
         else:
             self.O_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
-        self.O_pos_head = None
-        self.O_neg_head = None
+
+        if self.use_O_scalar:
+            self.O_pos_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
+            self.O_neg_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
+            self.learnable_scale_S = nn.Parameter(torch.tensor(1.0))
 
         # Domain gate G in [0,1] per step: shape (dag_depth,)
         self.G_head = nn.Linear(in_features, self.dag_depth)
@@ -128,58 +133,42 @@ class DAGLayer(ExtendedTorchModule):
         if self.use_output_selector:
             self.output_selector_head = nn.Linear(in_features, self.dag_depth)
 
-        # Initialize heads similar to standard small heads
-        if self.O_head is not None:
-            nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.O_head.bias)
-        if self.use_attention_selector:
-            nn.init.normal_(self.W_q.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.W_q.bias)
-            nn.init.normal_(self.node_keys, mean=0.0, std=0.02)
-            if self.use_positional_encoding:
-                nn.init.normal_(self.step_pos_embed, mean=0.0, std=0.02)
-        # no extra heads
-        nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
-        nn.init.zeros_(self.G_head.bias)
-        if self.use_output_selector:
-            nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.output_selector_head.bias)
+        # initialize
+        self.reset_parameters()
 
         # Numerical guards
-        self._mag_min = 1e-6
         self._mag_max = 1e28
         # Limit exponent to avoid overflow in float32 (exp(88) ~ 1.65e38, close to f32 max)
         # We choose 80 to provide headroom on MPS/float32 while remaining ample for float64.
         self._log_lim = 80.0
 
+        # Learnable soft minimum magnitude (soft differentiable floor)
+        self._mag_eps = nn.Parameter(torch.tensor(1e-6))
+
     def reset_parameters(self) -> None:
-        # Reinitialize prediction heads
-        if self.O_head is not None:
-            nn.init.normal_(self.O_head.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.O_head.bias)
-        if self.use_attention_selector:
-            nn.init.normal_(self.W_q.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.W_q.bias)
-            nn.init.normal_(self.node_keys, mean=0.0, std=0.02)
-            if self.use_positional_encoding:
-                nn.init.normal_(self.step_pos_embed, mean=0.0, std=0.02)
-        if self.O_pos_head is not None:
-            nn.init.normal_(self.O_pos_head.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.O_pos_head.bias)
-        if self.O_neg_head is not None:
-            nn.init.normal_(self.O_neg_head.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.O_neg_head.bias)
-        nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
-        nn.init.zeros_(self.G_head.bias)
-        if self.use_output_selector:
-            nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
-            nn.init.zeros_(self.output_selector_head.bias)
-        # No output selector head; output is always the last node
+        """Initialize all parameters automatically based on tensor dimensions."""
+        for name, param in self.named_parameters():
+            if param.dim() > 0:  # Multi-dimensional tensors (weights)
+                nn.init.normal_(param, mean=0.0, std=0.02)
+            else:  # 0-dimensional tensors (scalars, biases)
+                if name == "_mag_eps":
+                    # Initialize the soft floor to a small positive value
+                    nn.init.constant_(param, 1e-6)
+                else:
+                    nn.init.zeros_(param)
 
     @staticmethod
     def _ste_round(values: torch.Tensor) -> torch.Tensor:
         # Straight-through rounding to nearest integer
         return values.round().detach() + (values - values.detach())
+
+    def _soft_clamp_min(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Soft differentiable minimum clamping using learned epsilon."""
+        # Use softplus to ensure positive epsilon: eps = log(1 + exp(eps_raw))
+        eps = torch.nn.functional.softplus(self._mag_eps)
+        # Soft minimum: tensor + eps * log(1 + exp((eps - tensor) / eps))
+        # This creates a smooth transition around the minimum threshold
+        return tensor + eps * torch.log1p(torch.exp((eps - tensor) / eps))
 
     def _compute_domain_mixed_result(
         self,
@@ -190,7 +179,7 @@ class DAGLayer(ExtendedTorchModule):
     ) -> torch.Tensor:
         # Mixed-domain aggregation: linear domain uses signed values; log domain uses log magnitudes
         signed_values = working_sign * working_mag
-        log_mag = torch.log(torch.clamp(working_mag, min=self._mag_min))
+        log_mag = torch.log(self._soft_clamp_min(working_mag))
         mixed = log_mag * (1.0 - G_step) + signed_values * G_step
         return torch.sum(O_step * mixed, dim=-1, keepdim=True)
 
@@ -250,7 +239,7 @@ class DAGLayer(ExtendedTorchModule):
         B = input.size(0)
 
         # Initial node magnitudes and signs come directly from input features
-        init_mag = torch.clamp(input.abs(), min=self._mag_min, max=self._mag_max).to(
+        init_mag = torch.clamp(self._soft_clamp_min(input.abs()), max=self._mag_max).to(
             dtype
         )
         init_sign = torch.where(
@@ -290,16 +279,42 @@ class DAGLayer(ExtendedTorchModule):
         if self.training and self.use_ste_sign:
             hard = torch.where(
                 sign >= 0,
-                torch.tensor(1.0, adevice=sign.device, dtype=sign.dtype),
+                torch.tensor(1.0, device=sign.device, dtype=sign.dtype),
                 torch.tensor(-1.0, device=sign.device, dtype=sign.dtype),
             )
             sign = hard + (sign - sign.detach())
         O = sign * mag
         self._fail_if_nan("O (selector)", O)
+
+        # Compute O scalar if enabled
+        if self.use_O_scalar:
+            # Compute O components for scalar generation
+            O_pos_flat = self.O_pos_head(head_input)  # (B, dag_depth * total_nodes)
+            O_neg_flat = self.O_neg_head(head_input)  # (B, dag_depth * total_nodes)
+
+            # Reshape and normalize
+            O_pos = self.O_norm(O_pos_flat.view(B, self.dag_depth, self.total_nodes))
+            O_neg = self.O_norm(O_neg_flat.view(B, self.dag_depth, self.total_nodes))
+
+            # Convert to target dtype and apply sigmoid
+            O_pos = torch.sigmoid(O_pos.to(dtype))
+            O_neg = torch.sigmoid(O_neg.to(dtype))
+
+            # Store O_neg for scalar computation (we'll compute G first)
+            self._last_O_neg = O_neg.detach()
+
         G_logits = self.G_head(head_input)  # (B, dag_depth)
         self._fail_if_nan("G_logits", G_logits)
         G = torch.sigmoid(G_logits).to(dtype)
         self._fail_if_nan("G (gate)", G)
+
+        # Compute scalar if O scalar is enabled
+        if self.use_O_scalar:
+            # Compute scalar: G * O_neg * learnable_scale_S
+            self._last_scalar = (
+                G.unsqueeze(-1) * self._last_O_neg * self.learnable_scale_S
+            ).detach()
+            self._fail_if_nan("scalar", self._last_scalar)
 
         # Optionally freeze G to linear domain (G==1)
         if self.freeze_g_linear:
@@ -338,8 +353,15 @@ class DAGLayer(ExtendedTorchModule):
             causal[:, :valid_nodes] = 1.0
             O_step = O_step * causal
 
+            # Apply O scalar to magnitudes if enabled
+            if self.use_O_scalar:
+                step_scalar = self._last_scalar[:, step, :]  # (B, total_nodes)
+                working_mag_scaled = working_mag + step_scalar
+            else:
+                working_mag_scaled = working_mag
+
             R_mag = self._compute_domain_mixed_result(
-                working_mag, working_sign, O_step, G_step
+                working_mag_scaled, working_sign, O_step, G_step
             )
             self._fail_if_nan("R_mag (mixed-domain result)", R_mag)
             V_sign_new = self._compute_new_sign(R_mag, working_sign, O_step, G_step)
@@ -347,7 +369,7 @@ class DAGLayer(ExtendedTorchModule):
             self._fail_if_nan("V_sign_new", V_sign_new)
             self._fail_if_nan("V_mag_new", V_mag_new)
 
-            V_mag_new = torch.clamp(V_mag_new, min=self._mag_min, max=self._mag_max)
+            V_mag_new = torch.clamp(self._soft_clamp_min(V_mag_new), max=self._mag_max)
             V_sign_new = torch.clamp(V_sign_new, min=-1.0, max=1.0)
 
             idx = self.num_initial_nodes + step
