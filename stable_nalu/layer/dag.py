@@ -133,7 +133,7 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.output_selector_head.bias)
 
         # Numerical guards
-        self._mag_min = 1e-28
+        self._mag_min = 1e-11
         self._mag_max = 1e28
         # Limit exponent to avoid overflow in float32 (exp(88) ~ 1.65e38, close to f32 max)
         # We choose 80 to provide headroom on MPS/float32 while remaining ample for float64.
