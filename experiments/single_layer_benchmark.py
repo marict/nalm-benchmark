@@ -492,13 +492,6 @@ parser.add_argument(
     help="Reinitialization only occurs if the avg accumulated loss is greater than this threshold.",
 )
 
-parser.add_argument(
-    "--use-O-scalar",
-    action="store_true",
-    default=False,
-    help="Use O scalar system for DAG layer (experimental)",
-)
-
 args = parser.parse_args()
 
 
@@ -672,8 +665,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     npu_Wr_init=args.npu_Wr_init,
     nru_div_mode=args.nru_div_mode,
     realnpu_reg_type=args.realnpu_reg_type,
-    dag_depth=args.num_subsets,
-    use_O_scalar=args.use_O_scalar,
+    dag_depth=args.num_subsets + 1,
 )
 model.reset_parameters()
 if args.cuda:
@@ -776,7 +768,7 @@ for epoch_i, (x_train, t_train) in zip(
         if patience_counter >= PATIENCE:
             extrapolation_error = test_model(dataset_test_extrapolation_data)
             print(
-                f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error:.10f}"
+                f"Early stopping at step {epoch_i}: inter={interpolation_error.detach().cpu().item():.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
             )
             log_dict["early_stopped"] = 1
             early_stop = True
@@ -862,38 +854,19 @@ for epoch_i, (x_train, t_train) in zip(
         o_l1_mean = float(dag._last_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
 
-        # Log per-output statistics to identify which output is problematic
-        for i in range(dag.G_head.out_features):
-            col_weights = dag.G_head.weight[:, i]
-            col_bias = (
-                dag.G_head.bias[i] if dag.G_head.bias is not None else torch.tensor(0.0)
-            )
-            log_dict[f"dag/g_weight_col_{i}_max"] = float(
-                col_weights.abs().max().item()
-            )
-            log_dict[f"dag/g_weight_col_{i}_mean"] = float(
-                col_weights.abs().mean().item()
-            )
-            log_dict[f"dag/g_weight_col_{i}_finite"] = float(
-                torch.isfinite(col_weights).float().mean().item()
-            )
-            log_dict[f"dag/g_bias_col_{i}"] = float(col_bias.item())
-            log_dict[f"dag/g_bias_col_{i}_finite"] = float(
-                torch.isfinite(col_bias).float().item()
-            )
-
-        # Log O scalar metrics if enabled
-        if getattr(dag, "use_O_scalar", False):
-            log_dict["dag/scale_S"] = float(dag.learnable_scale_S.item())
-            if hasattr(dag, "_last_scalar") and dag._last_scalar is not None:
-                log_dict["dag/mean_scalar"] = float(dag._last_scalar.mean().item())
-
+    commit = False
     if epoch_i % args.log_interval == 0 or early_stop:
+        commit = True
         extrapolation_error = test_model(dataset_test_extrapolation_data)
         log_dict["mse/extra"] = float(extrapolation_error.detach().cpu().item())
         print(
             "train %d: %.10f, inter: %.10f, extra: %.10f"
-            % (epoch_i, loss_train_criterion, interpolation_error, extrapolation_error)
+            % (
+                epoch_i,
+                loss_train_criterion.detach().cpu().item(),
+                interpolation_error.detach().cpu().item(),
+                extrapolation_error.detach().cpu().item(),
+            )
         )
         # Inspect gate/selection on the first sample (concise)
         if dag is not None and hasattr(dag, "_last_G"):
@@ -921,7 +894,7 @@ for epoch_i, (x_train, t_train) in zip(
 
     if early_stop:
         print(f"Early stopped at step {epoch_i}")
-        wandb.wrapper.log(log_dict)
+        wandb.wrapper.log(log_dict, step=epoch_i + 1)
         break
 
     # Optimize model
@@ -987,8 +960,8 @@ for epoch_i, (x_train, t_train) in zip(
                 epoch_losses = []
                 reinit_counter += 1
 
-    # If we early stopped, print the final metrics
-    wandb.wrapper.log(log_dict)
+    # Log to W&B with step number
+    wandb.wrapper.log(log_dict, step=epoch_i, commit=commit)
 
 # Compute validation loss
 loss_valid_inter = test_model(dataset_valid_interpolation_data)

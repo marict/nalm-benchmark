@@ -42,6 +42,8 @@ class GradTap(torch.autograd.Function):
         return grad_out, None
 
 
-def tap(x: torch.Tensor, tag: str) -> torch.Tensor:
+def tap(x: torch.Tensor, tag: str, enable: bool = True) -> torch.Tensor:
     """Convenience wrapper for GradTap."""
-    return GradTap.apply(x, tag)
+    if enable:
+        return GradTap.apply(x, tag)
+    return x
