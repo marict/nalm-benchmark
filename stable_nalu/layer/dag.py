@@ -3,37 +3,20 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
+from debug_utils import tap
+
 from ..abstract import ExtendedTorchModule
 
 """
 grokking commands:
 
-python3 experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation add --input-size 3 --batch-size 1000 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0
-
-python3 experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --opefration mul --input-size 3 --batch-size 256 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0
-
----
-
-python /Users/paul_curry/ai2/runpod_service/runpod_launcher.py experiments/single_layer_benchmark.py --layer-type DAG --operation sub --input-size 3 --batch-size 256 --max-iterations 25000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-sub
-
-python /Users/paul_curry/ai2/runpod_service/runpod_launcher.py experiments/single_layer_benchmark.py --layer-type DAG --operation div --input-size 3 --batch-size 256 --max-iterations 25000 --log-interval 100 --clip-grad-norm 1.0 --pod-name nalm-div
-
-
----
-SELECTOR_TAU_DEFAULT
-
-groks at: 11000
-python experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation div --input-size 3 --batch-size 1024 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --learning-rate 1e-3
-
-groks at: 2000
-python experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation sub --input-size 3 --batch-size 1024 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --learning-rate 1e-3
-
-groks at: 63000
-python experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation mul --input-size 3 --batch-size 1024 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --learning-rate 1e-3
-
-groks at: 19000
-python experiments/single_layer_benchmark.py --no-cuda --layer-type DAG --operation add --input-size 3 --batch-size 1024 --max-iterations 300000 --log-interval 1000 --clip-grad-norm 1.0 --learning-rate 1e-3
-
+grokked at: 9000
+python /Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py \
+--layer-type DAG --operation div --input-size 2 --batch-size 7024 \
+--max-iterations 50000 --log-interval 1000 \
+--interpolation-range '[-2.0,1.0]' \
+--extrapolation-range '[-6.0,-2.0]' \
+--seed 1 --clip-grad-norm 0.01
 
 """
 
@@ -66,9 +49,9 @@ class DAGLayer(ExtendedTorchModule):
         name: str | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        use_ste_G: bool = True,  # Always on
+        use_ste_G: bool = True,  # Always on, otherwise NaN city.
         use_attention_selector: bool = False,
-        selector_dim: int = 256,  # Seems highly correlated with div grokking
+        selector_dim: int = 256,
         use_positional_encoding: bool = False,
         use_output_selector: bool = True,
         **kwargs,
@@ -148,7 +131,7 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.output_selector_head.bias)
 
         # Numerical guards
-        self._mag_min = 1e-6
+        self._mag_min = 1e-11
         self._mag_max = 1e28
         # Limit exponent to avoid overflow in float32 (exp(88) ~ 1.65e38, close to f32 max)
         # We choose 80 to provide headroom on MPS/float32 while remaining ample for float64.
@@ -212,11 +195,16 @@ class DAGLayer(ExtendedTorchModule):
     def _compute_new_magnitude(
         self, R_mag: torch.Tensor, G_step: torch.Tensor
     ) -> torch.Tensor:
-        # Blend between linear magnitude and exp(log-magnitude)
-        linear_mag = torch.clamp(torch.abs(R_mag), max=self._mag_max)
-        R_mag_clamped = torch.clamp(R_mag, min=-self._log_lim, max=self._log_lim)
-        log_mag_result = torch.exp(R_mag_clamped)
-        return G_step * linear_mag + (1.0 - G_step) * log_mag_result
+        # Geometric mixing in log space to tame ∂/∂G
+        # l_lin = log |R|
+        l_lin = torch.log(torch.clamp(torch.abs(R_mag), min=self._mag_min))
+        # l_log = R clamped (already a log-magnitude)
+        l_log = torch.clamp(R_mag, min=-self._log_lim, max=self._log_lim)
+        # interpolate on the log scale
+        m_log = G_step * l_lin + (1.0 - G_step) * l_log
+        # cap then exponentiate
+        m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
+        return torch.exp(m_log)
 
     def _is_nan(self, name: str, tensor: torch.Tensor) -> None:
         # Keep legacy name but treat any non-finite as an error for clearer debugging
@@ -257,15 +245,18 @@ class DAGLayer(ExtendedTorchModule):
         dtype = torch.float64 if device.type != "mps" else torch.float32
         B = input.size(0)
 
+        # Investigate this maybe we are grokking:
         # Initial node magnitudes and signs come directly from input features
         init_mag = torch.clamp(input.abs(), min=self._mag_min, max=self._mag_max).to(
             dtype
         )
+        init_mag = tap(init_mag, "init_mag")
         init_sign = torch.where(
             input >= 0,
             torch.tensor(1.0, device=device),
             torch.tensor(-1.0, device=device),
         ).to(dtype)
+        init_sign = tap(init_sign, "init_sign")
 
         # Predict structure from input
         # Soft selector with temperature; O in [-1,1]
@@ -289,15 +280,40 @@ class DAGLayer(ExtendedTorchModule):
         O_mask = self.O_mask.to(dtype).to(device)
         L = L * O_mask.unsqueeze(0)
 
-        self._is_nan("L (selector logits)", L)
+        if self._is_nan("L (selector logits)", L):
+            import pdb
+
+            pdb.set_trace()
         sign = torch.tanh(L)
         mag = torch.sigmoid(torch.abs(L))
         O = sign * mag
-        self._is_nan("O (selector)", O)
+        O = tap(O, "O_selector")
+        if self._is_nan("O (selector)", O):
+            import pdb
+
+            pdb.set_trace()
+
         G_logits = self.G_head(input)  # (B, dag_depth)
-        self._is_nan("G_logits", G_logits)
-        G = torch.sigmoid(G_logits).to(dtype)
-        self._is_nan("G (gate)", G)
+        G_logits = tap(G_logits, "G_logits")
+        if self._is_nan("G_logits", G_logits):
+            import pdb
+
+            pdb.set_trace()
+
+        # Apply tanh constraint to prevent sigmoid gradient explosion
+        G_logits = torch.tanh(G_logits / 10.0) * 10.0  # Smoothly constrain to [-10, 10]
+        if G_logits.abs().max() > 10.1:
+            import pdb
+
+            pdb.set_trace()
+        G_logits = tap(G_logits, "G_logits_tanh")
+
+        G = torch.sigmoid(G_logits / 2.0).to(dtype)
+        G = tap(G, "G_gate")
+        if self._is_nan("G (gate)", G):
+            import pdb
+
+            pdb.set_trace()
 
         # Optionally freeze G to linear domain (G==1)
         if self.freeze_g_linear:
@@ -316,8 +332,9 @@ class DAGLayer(ExtendedTorchModule):
             G = (G > 0.5).to(G.dtype)
 
         # Expose selector tensors for external logging to avoid recomputation elsewhere
-        self._last_G = G.detach()
-        self._last_O = O.detach()
+        if self.training:
+            self._last_G = G.detach()
+            self._last_O = O.detach()
 
         # Prepare working tensors: start with initial nodes, append one per step
         working_mag = torch.zeros(B, self.total_nodes, dtype=dtype, device=device)
@@ -333,9 +350,12 @@ class DAGLayer(ExtendedTorchModule):
             R_mag = self._compute_domain_mixed_result(
                 working_mag, working_sign, O_step, G_step
             )
+            R_mag = tap(R_mag, "R_mag")
             self._is_nan("R_mag (mixed-domain result)", R_mag)
             V_sign_new = self._compute_new_sign(R_mag, working_sign, O_step, G_step)
+            V_sign_new = tap(V_sign_new, "V_sign_new")
             V_mag_new = self._compute_new_magnitude(R_mag, G_step)
+            V_mag_new = tap(V_mag_new, "V_mag_new")
             self._is_nan("V_sign_new", V_sign_new)
             self._is_nan("V_mag_new", V_mag_new)
 
@@ -348,6 +368,10 @@ class DAGLayer(ExtendedTorchModule):
             working_mag = working_mag.scatter(-1, index_tensor, V_mag_new)
             working_sign = working_sign.scatter(-1, index_tensor, V_sign_new)
 
+            # Monitor working tensor health after each step
+            working_mag = tap(working_mag, f"working_mag_step_{step}")
+            working_sign = tap(working_sign, f"working_sign_step_{step}")
+
         # Final output: either last node or optional selector over intermediate nodes
         if self.use_output_selector:
             # Logits over intermediate nodes only (shape: (B, dag_depth))
@@ -357,18 +381,19 @@ class DAGLayer(ExtendedTorchModule):
             # Values for intermediate nodes slice [in_features : total_nodes) -> shape (B, dag_depth)
             value_vec_inter = (working_sign * working_mag)[:, self.num_initial_nodes :]
             # Expose for external logging
-            self._last_out_logits = out_logits.detach()
-            self._last_value_vec_inter = value_vec_inter.detach()
             if not self.training:
                 idx = torch.argmax(out_logits, dim=-1, keepdim=True)  # (B,1)
                 final_value = value_vec_inter.gather(-1, idx).squeeze(-1)
             else:
                 probs = torch.softmax(out_logits, dim=-1)
                 final_value = torch.sum(probs * value_vec_inter, dim=-1)
+                self._last_out_logits = out_logits.detach()
+                self._last_value_vec_inter = value_vec_inter.detach()
         else:
             final_idx = self.total_nodes - 1
             final_value = working_sign[:, final_idx] * working_mag[:, final_idx]
 
+        final_value = tap(final_value, "final_value")
         self._is_nan("final_value", final_value)
 
         # Return with expected dtype
