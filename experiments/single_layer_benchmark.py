@@ -15,6 +15,7 @@ import stable_nalu
 import stable_nalu.functional.regualizer as Regualizer
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
+from debug_utils import tap_context
 
 
 class NoOpScheduler:
@@ -492,6 +493,14 @@ parser.add_argument(
     help="Reinitialization only occurs if the avg accumulated loss is greater than this threshold.",
 )
 
+parser.add_argument(
+    "--num-bins",
+    action="store",
+    default=5,
+    type=int,
+    help="Number of bins for |x| binned MSE analysis (default: 5)",
+)
+
 args = parser.parse_args()
 
 
@@ -570,6 +579,7 @@ print(f"  - reinit: {args.reinit}")
 print(f"  - reinit_epoch_interval: {args.reinit_epoch_interval}")
 print(f"  - reinit_max_stored_losses: {args.reinit_max_stored_losses}")
 print(f"  - reinit_loss_thr: {args.reinit_loss_thr}")
+print(f"  - num_bins: {args.num_bins}")
 print(f"  -")
 
 
@@ -691,6 +701,83 @@ if args.lr_cosine:
 else:
     scheduler = NoOpScheduler(optimizer)
 
+# Compute bins for |x|
+def compute_bins(x, num_bins: int = 5):
+    x_abs = x.abs().min(dim=1).values
+    # Use quantiles to ensure roughly equal sample counts per bin
+    quantiles = torch.quantile(x_abs, torch.linspace(0, 1, num_bins + 1))
+    bin_edges = quantiles
+    
+    # Assign samples to bins based on quantiles
+    bin_indices = torch.zeros_like(x_abs, dtype=torch.long)
+    for i in range(num_bins):
+        if i == 0:
+            mask = x_abs <= bin_edges[i + 1]
+        elif i == num_bins - 1:
+            mask = x_abs > bin_edges[i]
+        else:
+            mask = (x_abs > bin_edges[i]) & (x_abs <= bin_edges[i + 1])
+        bin_indices[mask] = i
+
+    print("=" * 60)
+    print("📊 BINNED MSE ANALYSIS SETUP")
+    print("=" * 60)
+    print(f"📈 Input tensor shape: {x.shape}")
+    print(f"🔢 Number of bins: {num_bins}")
+    print(f"📏 min|x| range: [{x_abs.min().item():.6f}, {x_abs.max().item():.6f}]")
+    print()
+    print("📋 Bin boundaries (quantile-based):")
+    for i in range(num_bins):
+        if i == 0:
+            print(f"   Bin {i}: min|x| ≤ {bin_edges[i + 1]:.6f}")
+        elif i == num_bins - 1:
+            print(f"   Bin {i}: min|x| > {bin_edges[i]:.6f}")
+        else:
+            print(f"   Bin {i}: {bin_edges[i]:.6f} < min|x| ≤ {bin_edges[i + 1]:.6f}")
+    print()
+    print("🎯 Sample distribution per bin:")
+    for i in range(num_bins):
+        count = (bin_indices == i).sum()
+        print(f"   Bin {i}: {count} samples")
+    print("=" * 60)
+    
+    return bin_indices
+
+def compute_binned_mse(data, bin_indices, name:str) -> dict:
+    """
+    Compute MSE for different log-spaced bins of |x| values.
+    
+    Args:
+        data: Tuple of (x, t) where x is input tensor and t is target tensor
+        num_bins: Number of log-spaced bins to create
+        
+    Returns:
+        Dictionary with bin counts and MSE per bin
+    """
+    x, t = data
+
+    # Compute MSE per bin
+    total_bins = bin_indices.max() + 1
+    result = {}
+    total_mse = 0
+    total_samples = 0
+    for bin_idx in range(total_bins):
+        bin_samples = (bin_indices == bin_idx)
+        count = bin_samples.sum()
+        if count > 0:
+            bin_data = (x[bin_samples], t[bin_samples])
+            bin_mse = test_model(bin_data)
+            bin_mse_scalar = float(bin_mse.detach().cpu().item())
+            result[f"mse/{name}/bin_{bin_idx}"] = bin_mse_scalar
+            total_mse += bin_mse_scalar * count
+            total_samples += count
+        else:
+            result[f"mse/{name}/bin_{bin_idx}"] = float('nan')
+
+    # Compute weighted average MSE across all bins
+    interpolation_error = total_mse / total_samples if total_samples > 0 else float('nan')
+    
+    return result, interpolation_error
 
 def test_model(data):
     with torch.no_grad(), model.no_internal_logging(), model.no_random():
@@ -748,9 +835,12 @@ if args.reinit:
 
 patience_counter = 0
 early_stop = False
+
+bin_indices = compute_bins(dataset_valid_interpolation_data[0])
 for epoch_i, (x_train, t_train) in zip(
     range(resume_epoch, args.max_iterations + 1), dataset_train
 ):
+    tap_context.set_epoch_i(epoch_i)
     summary_writer.set_iteration(epoch_i)
 
     # Prepear model
@@ -758,30 +848,32 @@ for epoch_i, (x_train, t_train) in zip(
     optimizer.zero_grad()
     log_dict = {}
 
-    # Run tests and check for early stoppage
-    interpolation_error = test_model(dataset_valid_interpolation_data)
+    # Compute binned MSE for interpolation data (also returns total interpolation error)
+    binned_mse, interpolation_error = compute_binned_mse(dataset_valid_interpolation_data, bin_indices, "inter")
+    log_dict.update(binned_mse)
 
     _es_thr = 1e-10
     PATIENCE = 3
-    if float(interpolation_error.detach().cpu().item()) < _es_thr:
+    if interpolation_error < _es_thr:
         patience_counter += 1
         if patience_counter >= PATIENCE:
             extrapolation_error = test_model(dataset_test_extrapolation_data)
             print(
-                f"Early stopping at step {epoch_i}: inter={interpolation_error.detach().cpu().item():.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
+                f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
             )
             log_dict["early_stopped"] = 1
             early_stop = True
     else:
         patience_counter = 0
 
-    assert model.training
+    # Disable this for now
+    # assert model.training
 
-    # Per-step clamped (eval-mode) training MSE; not used for backprop
-    train_eval_error = test_model((x_train, t_train))
-    log_dict["mse/train_eval"] = float(train_eval_error.detach().cpu().item())
+    # # Per-step clamped (eval-mode) training MSE; not used for backprop
+    # train_eval_error = test_model((x_train, t_train))
+    # log_dict["mse/train_eval"] = float(train_eval_error.detach().cpu().item())
 
-    assert model.training
+    # assert model.training
 
     # forward
     y_train = model(x_train)
@@ -846,7 +938,7 @@ for epoch_i, (x_train, t_train) in zip(
     dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
 
     log_dict["loss/train"] = float(loss_train_criterion.detach().cpu().item())
-    log_dict["mse/inter"] = float(interpolation_error.detach().cpu().item())
+    log_dict["mse/inter"] = float(interpolation_error)
 
     log_dict["lr"] = float(scheduler.get_last_lr()[0])
     if dag is not None:
@@ -859,12 +951,13 @@ for epoch_i, (x_train, t_train) in zip(
         commit = True
         extrapolation_error = test_model(dataset_test_extrapolation_data)
         log_dict["mse/extra"] = float(extrapolation_error.detach().cpu().item())
+        
         print(
             "train %d: %.10f, inter: %.10f, extra: %.10f"
             % (
                 epoch_i,
                 loss_train_criterion.detach().cpu().item(),
-                interpolation_error.detach().cpu().item(),
+                interpolation_error,
                 extrapolation_error.detach().cpu().item(),
             )
         )
@@ -875,6 +968,8 @@ for epoch_i, (x_train, t_train) in zip(
             t0 = float(t_train[0].detach().cpu().view(-1)[0].item())
             g_first = dag._last_G[0].detach().cpu().tolist()
             o_first = dag._last_O[0].detach().cpu().tolist()
+            o_sign_first = dag._last_O_sign[0].detach().cpu().tolist()
+            o_mag_first = dag._last_O_mag[0].detach().cpu().tolist()
             print("First sample statistics:")
             print(f"x0={[round(x, 5) for x in x0]}")
             print(f"y0={round(y0, 5)}")
@@ -883,6 +978,10 @@ for epoch_i, (x_train, t_train) in zip(
             print("O:")
             for step_idx, step_values in enumerate(o_first):
                 rounded_values = [round(v, 5) for v in step_values]
+                rounded_sign = [round(o, 5) for o in o_sign_first[step_idx]]
+                rounded_mag = [round(o, 5) for o in o_mag_first[step_idx]]
+                print(f"  Step {step_idx} sign: {rounded_sign}")
+                print(f"  Step {step_idx} mag: {rounded_mag}")
                 print(f"  Step {step_idx}: {rounded_values}")
             if getattr(dag, "use_output_selector", False) and hasattr(
                 dag, "_last_out_logits"
@@ -904,26 +1003,30 @@ for epoch_i, (x_train, t_train) in zip(
         clip_thresh = (
             float("inf") if args.clip_grad_norm == None else args.clip_grad_norm
         )
-        # Log gradient norms before clipping
-        norm_before_clip = torch.nn.utils.clip_grad_norm_(
-            model.parameters(), clip_thresh, error_if_nonfinite=True
-        ).item()
-        log_dict["gradients/norm_before_clip"] = float(norm_before_clip)
-
-        # Apply gradient clipping
-        if args.clip_grad_norm != None:
-            # Verify clipping worked: compute actual norm after clipping
-            norm_after_clip = torch.nn.utils.clip_grad_norm_(
-                model.parameters(), float("inf"), error_if_nonfinite=True
+        try:
+            # Log gradient norms before clipping
+            norm_before_clip = torch.nn.utils.clip_grad_norm_(
+                model.parameters(), clip_thresh, error_if_nonfinite=True
             ).item()
+            log_dict["gradients/norm_before_clip"] = float(norm_before_clip)
 
-            log_dict["gradients/norm_after_clip"] = float(norm_after_clip)
+            # Apply gradient clipping
+            if args.clip_grad_norm != None:
+                # Verify clipping worked: compute actual norm after clipping
+                norm_after_clip = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), float("inf"), error_if_nonfinite=True
+                ).item()
 
-            log_dict["gradients/clipping_ratio"] = float(
-                norm_after_clip / norm_before_clip
-            )
-        else:
-            log_dict["gradients/clipping_ratio"] = 1.0
+                log_dict["gradients/norm_after_clip"] = float(norm_after_clip)
+
+                log_dict["gradients/clipping_ratio"] = float(
+                    norm_after_clip / norm_before_clip
+                )
+            else:
+                log_dict["gradients/clipping_ratio"] = 1.0
+        except:
+            import pdb; pdb.set_trace()
+            raise
 
         if args.clip_grad_value != None:
             torch.nn.utils.clip_grad_value_(model.parameters(), args.clip_grad_value)
@@ -966,12 +1069,14 @@ for epoch_i, (x_train, t_train) in zip(
 # Compute validation loss
 loss_valid_inter = test_model(dataset_valid_interpolation_data)
 loss_valid_extra = test_model(dataset_test_extrapolation_data)
+loss_train_capped = test_model([x_train, t_train])
 
 # Write results for this training
 print(f"finished:")
 if args.reinit:
     print(f"Reinitialized {reinit_counter} times")
 
+print(f"  - loss_train_capped: {loss_train_capped}")
 print(f"  - loss_train (+reg loss): {loss_train}")
 print(f"  - loss_train_criterion: {loss_train_criterion}")
 print(f"  - loss_valid_inter: {loss_valid_inter}")
