@@ -1,9 +1,9 @@
 import argparse
 import ast
+import datetime
 import math
 import os
 import random
-import time
 from decimal import Decimal
 
 import numpy as np
@@ -13,9 +13,9 @@ import torch
 import misc.utils as utils
 import stable_nalu
 import stable_nalu.functional.regualizer as Regualizer
+from debug_utils import tap_context
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
-from debug_utils import tap_context
 
 
 class NoOpScheduler:
@@ -41,10 +41,9 @@ class NoOpScheduler:
         pass
 
 
-run = wandb.init_wandb(
-    local_project="nalm-benchmark",
-    placeholder_name=f"local-run-{int(time.time())}",
-)
+def get_default_note():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 
 # Parse arguments
 parser = argparse.ArgumentParser(description="Runs the simple function static task")
@@ -105,7 +104,6 @@ parser.add_argument(
     default=None,
     help="Set the first layer to be a different type",
 )
-
 parser.add_argument(
     "--max-iterations",
     action="store",
@@ -501,8 +499,22 @@ parser.add_argument(
     help="Number of bins for |x| binned MSE analysis (default: 5)",
 )
 
+parser.add_argument(
+    "--note",
+    action="store",
+    default=None,
+    type=str,
+    help="Note to add to wandb run name (default: human readable datetime)",
+)
+
 args = parser.parse_args()
 
+# Initialize wandb with note
+note = args.note if args.note else get_default_note()
+run = wandb.init_wandb(
+    local_project="nalm-benchmark",
+    placeholder_name=f"local - {note}",
+)
 
 utils.set_pytorch_precision(args.pytorch_precision)
 setattr(args, "cuda", torch.cuda.is_available() and not args.no_cuda)
@@ -675,7 +687,8 @@ model = stable_nalu.network.SingleLayerNetwork(
     npu_Wr_init=args.npu_Wr_init,
     nru_div_mode=args.nru_div_mode,
     realnpu_reg_type=args.realnpu_reg_type,
-    dag_depth=args.num_subsets + 1,
+    # dag_depth=args.num_subsets + 1,
+    dag_depth=1,
 )
 model.reset_parameters()
 if args.cuda:
@@ -701,13 +714,14 @@ if args.lr_cosine:
 else:
     scheduler = NoOpScheduler(optimizer)
 
+
 # Compute bins for |x|
 def compute_bins(x, num_bins: int = 5):
     x_abs = x.abs().min(dim=1).values
     # Use quantiles to ensure roughly equal sample counts per bin
     quantiles = torch.quantile(x_abs, torch.linspace(0, 1, num_bins + 1))
     bin_edges = quantiles
-    
+
     # Assign samples to bins based on quantiles
     bin_indices = torch.zeros_like(x_abs, dtype=torch.long)
     for i in range(num_bins):
@@ -740,17 +754,18 @@ def compute_bins(x, num_bins: int = 5):
         count = (bin_indices == i).sum()
         print(f"   Bin {i}: {count} samples")
     print("=" * 60)
-    
+
     return bin_indices
 
-def compute_binned_mse(data, bin_indices, name:str) -> dict:
+
+def compute_binned_mse(data, bin_indices, name: str) -> dict:
     """
     Compute MSE for different log-spaced bins of |x| values.
-    
+
     Args:
         data: Tuple of (x, t) where x is input tensor and t is target tensor
         num_bins: Number of log-spaced bins to create
-        
+
     Returns:
         Dictionary with bin counts and MSE per bin
     """
@@ -762,7 +777,7 @@ def compute_binned_mse(data, bin_indices, name:str) -> dict:
     total_mse = 0
     total_samples = 0
     for bin_idx in range(total_bins):
-        bin_samples = (bin_indices == bin_idx)
+        bin_samples = bin_indices == bin_idx
         count = bin_samples.sum()
         if count > 0:
             bin_data = (x[bin_samples], t[bin_samples])
@@ -772,12 +787,15 @@ def compute_binned_mse(data, bin_indices, name:str) -> dict:
             total_mse += bin_mse_scalar * count
             total_samples += count
         else:
-            result[f"mse/{name}/bin_{bin_idx}"] = float('nan')
+            result[f"mse/{name}/bin_{bin_idx}"] = float("nan")
 
     # Compute weighted average MSE across all bins
-    interpolation_error = total_mse / total_samples if total_samples > 0 else float('nan')
-    
+    interpolation_error = (
+        total_mse / total_samples if total_samples > 0 else float("nan")
+    )
+
     return result, interpolation_error
+
 
 def test_model(data):
     with torch.no_grad(), model.no_internal_logging(), model.no_random():
@@ -849,7 +867,9 @@ for epoch_i, (x_train, t_train) in zip(
     log_dict = {}
 
     # Compute binned MSE for interpolation data (also returns total interpolation error)
-    binned_mse, interpolation_error = compute_binned_mse(dataset_valid_interpolation_data, bin_indices, "inter")
+    binned_mse, interpolation_error = compute_binned_mse(
+        dataset_valid_interpolation_data, bin_indices, "inter"
+    )
     log_dict.update(binned_mse)
 
     _es_thr = 1e-10
@@ -951,7 +971,7 @@ for epoch_i, (x_train, t_train) in zip(
         commit = True
         extrapolation_error = test_model(dataset_test_extrapolation_data)
         log_dict["mse/extra"] = float(extrapolation_error.detach().cpu().item())
-        
+
         print(
             "train %d: %.10f, inter: %.10f, extra: %.10f"
             % (
@@ -980,9 +1000,10 @@ for epoch_i, (x_train, t_train) in zip(
                 rounded_values = [round(v, 5) for v in step_values]
                 rounded_sign = [round(o, 5) for o in o_sign_first[step_idx]]
                 rounded_mag = [round(o, 5) for o in o_mag_first[step_idx]]
-                print(f"  Step {step_idx} sign: {rounded_sign}")
-                print(f"  Step {step_idx} mag: {rounded_mag}")
-                print(f"  Step {step_idx}: {rounded_values}")
+                print(f"\tStep {step_idx}")
+                print(f"\t\tsign: {rounded_sign}")
+                print(f"\t\tmag: {rounded_mag}")
+                print(f"\t\tvalues: {rounded_values}")
             if getattr(dag, "use_output_selector", False) and hasattr(
                 dag, "_last_out_logits"
             ):
@@ -1025,7 +1046,9 @@ for epoch_i, (x_train, t_train) in zip(
             else:
                 log_dict["gradients/clipping_ratio"] = 1.0
         except:
-            import pdb; pdb.set_trace()
+            import pdb
+
+            pdb.set_trace()
             raise
 
         if args.clip_grad_value != None:

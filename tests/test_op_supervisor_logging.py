@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import types
 
-import nalm_benchmark.experiments.op_supervisor as sup
+import experiments.op_supervisor as sup
 
 
 class DummyWandb:
@@ -43,5 +43,5 @@ def test_log_completion_and_child_failure(monkeypatch):
     d.log({"sub/child_failed": 1, "supervisor/last_failure": "label rc=1"})
 
     # Verify logs captured
-    assert any("completed_total" in x for x in d.logged)
+    assert any("sub/completed_total" in x for x in d.logged)
     assert any("sub/child_failed" in x for x in d.logged)
