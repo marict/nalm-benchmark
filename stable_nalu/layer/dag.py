@@ -86,7 +86,7 @@ class DAGLayer(ExtendedTorchModule):
         nn.init.normal_(self.O_sign_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.O_sign_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
-        nn.init.constant_(self.G_head.bias, -2.0)
+        nn.init.constant_(self.G_head.bias, 0.0)
         nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.output_selector_head.bias)
 
@@ -284,7 +284,7 @@ class DAGLayer(ExtendedTorchModule):
 
         working_mag = torch.zeros(B, self.total_nodes, dtype=dtype, device=device)
         working_sign = torch.zeros(B, self.total_nodes, dtype=dtype, device=device)
-        working_mag[:, : self.num_initial_nodes] = input
+        working_mag[:, : self.num_initial_nodes] = abs(input)
         working_sign[:, : self.num_initial_nodes] = init_sign
 
         # Debug attributes to track intermediate states
@@ -321,6 +321,19 @@ class DAGLayer(ExtendedTorchModule):
                 pdb.set_trace()
             V_sign_new = self._compute_new_sign(R_lin, working_sign, O_step, G_step)
             V_mag_new = self._compute_new_magnitude(R_lin, R_log, G_step)
+
+            # TEMPORARY DEBUG: Print intermediate values
+            print(f"=== DAG Step {step} Debug ===")
+            print(
+                f"  O_step[0,:4]: {O_step[0,:4].detach().numpy() if len(O_step) > 0 else 'N/A'}"
+            )
+            print(f"  G_step[0]: {G_step[0].item():.6f}")
+            print(f"  working_mag[0,:4]: {working_mag[0,:4].detach().numpy()}")
+            print(f"  working_sign[0,:4]: {working_sign[0,:4].detach().numpy()}")
+            print(f"  R_lin[0]: {R_lin[0].item():.6f}")
+            print(f"  R_log[0]: {R_log[0].item():.6f}")
+            print(f"  V_sign_new[0]: {V_sign_new[0].item():.6f}")
+            print(f"  V_mag_new[0]: {V_mag_new[0].item():.6f}")
 
             # Debug: save new computed values
             self._debug_V_sign_new.append(V_sign_new.clone())
