@@ -161,7 +161,7 @@ class DAGLayer(ExtendedTorchModule):
         working_sign: torch.Tensor,
         O_step: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """L1-normalize O_step (signed convex mix), then aggregate linear/log terms."""
+        """Aggregate linear/log terms."""
         signed_values = working_sign * working_mag
         log_mag = torch.log(torch.clamp(working_mag, min=self._mag_min))
 
@@ -179,12 +179,19 @@ class DAGLayer(ExtendedTorchModule):
     ) -> torch.Tensor:
         """Mix signs in linear and log domains with bounded outputs."""
 
+        # We extract the linear sign based on result of the operation
         linear_sign = torch.tanh(R_lin)
-        log_sign = torch.tanh(
-            (torch.abs(O_step) * working_sign).sum(dim=-1, keepdim=True)
-        )
+
+        # Map working_sign to angles for smooth sign
+        w = torch.abs(O_step)
+        neg_frac = 0.5 * (1.0 - working_sign)  # 1 for −1, 0 for +1, fractional if soft
+        m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+
+        # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
+        log_sign = torch.cos(math.pi * m)
         s = G_step * linear_sign + (1.0 - G_step) * log_sign
-        s = torch.clamp(s, -1.0, 1.0)
+        # STE on s to get hard sign
+        s = self._ste_round(s)
         return s
 
     def soft_floor(self, x: torch.Tensor, min: float, t: float = 1.0) -> torch.Tensor:
@@ -321,19 +328,6 @@ class DAGLayer(ExtendedTorchModule):
                 pdb.set_trace()
             V_sign_new = self._compute_new_sign(R_lin, working_sign, O_step, G_step)
             V_mag_new = self._compute_new_magnitude(R_lin, R_log, G_step)
-
-            # TEMPORARY DEBUG: Print intermediate values
-            print(f"=== DAG Step {step} Debug ===")
-            print(
-                f"  O_step[0,:4]: {O_step[0,:4].detach().numpy() if len(O_step) > 0 else 'N/A'}"
-            )
-            print(f"  G_step[0]: {G_step[0].item():.6f}")
-            print(f"  working_mag[0,:4]: {working_mag[0,:4].detach().numpy()}")
-            print(f"  working_sign[0,:4]: {working_sign[0,:4].detach().numpy()}")
-            print(f"  R_lin[0]: {R_lin[0].item():.6f}")
-            print(f"  R_log[0]: {R_log[0].item():.6f}")
-            print(f"  V_sign_new[0]: {V_sign_new[0].item():.6f}")
-            print(f"  V_mag_new[0]: {V_mag_new[0].item():.6f}")
 
             # Debug: save new computed values
             self._debug_V_sign_new.append(V_sign_new.clone())
