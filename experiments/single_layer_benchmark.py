@@ -517,9 +517,13 @@ args = parser.parse_args()
 
 # Initialize wandb with note
 note = args.note if args.note else get_default_note()
+operation = args.operation
+placeholder_name = f"local - {operation}"
+if note:
+    placeholder_name = f"{placeholder_name} - {note}"
 run = wandb.init_wandb(
     local_project="nalm-benchmark",
-    placeholder_name=f"local - {note}",
+    placeholder_name=placeholder_name,
     open_browser=not args.no_open_browser,
 )
 

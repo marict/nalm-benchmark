@@ -10,7 +10,7 @@ from debug_utils import tap
 from ..abstract import ExtendedTorchModule
 
 """
- python experiments/single_layer_benchmark.py \
+python experiments/single_layer_benchmark.py \
     --layer-type DAG \
     --operation <add|mul|sub> \
     --input-size 2 \
@@ -75,6 +75,7 @@ class DAGLayer(ExtendedTorchModule):
         enable_debug_logging: bool = False,
         enable_taps: bool = True,
         _do_not_predict_weights: bool = False,
+        use_dense_features: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -105,15 +106,34 @@ class DAGLayer(ExtendedTorchModule):
         self.enable_debug_logging = bool(enable_debug_logging)
         self.enable_taps = bool(enable_taps)
         self._do_not_predict_weights = bool(_do_not_predict_weights)
+        self.use_dense_features = bool(use_dense_features)
 
-        self.O_mag_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
-        self.O_sign_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
-        self.G_head = nn.Linear(in_features, self.dag_depth)
+        # Calculate input size for heads based on dense features
+        if self.use_dense_features:
+            # Dense features: [x, x^2, x^3, exp(x), log(|x|+eps), sin(x), cos(x), tanh(x)] per input
+            self.dense_features_per_input = 8
+            head_input_size = in_features * self.dense_features_per_input
+        else:
+            head_input_size = in_features
+
+        self.O_mag_head = nn.Linear(head_input_size, self.dag_depth * self.total_nodes)
+        self.O_sign_head = nn.Linear(head_input_size, self.dag_depth * self.total_nodes)
+        self.G_head = nn.Linear(head_input_size, self.dag_depth)
 
         # Add normalization layers (gated behind flag)
         if self.use_normalization:
             self.input_norm = nn.LayerNorm(in_features)
-            self.head_norm = nn.LayerNorm(in_features)
+            self.head_norm = nn.LayerNorm(head_input_size)
+            self.extra_norm1 = nn.LayerNorm(in_features)
+            self.extra_norm2 = nn.LayerNorm(in_features)
+            self.extra_norm3 = nn.LayerNorm(in_features)
+            self.extra_norm4 = nn.LayerNorm(in_features)
+            self.extra_norm5 = nn.LayerNorm(in_features)
+            self.extra_norm6 = nn.LayerNorm(in_features)
+            self.extra_norm7 = nn.LayerNorm(in_features)
+            self.extra_norm8 = nn.LayerNorm(in_features)
+            self.extra_norm9 = nn.LayerNorm(in_features)
+            self.extra_norm10 = nn.LayerNorm(in_features)
             self.O_norm = nn.LayerNorm(self.total_nodes)
         else:
             self.input_norm = None
@@ -125,12 +145,12 @@ class DAGLayer(ExtendedTorchModule):
             valid_nodes = self.num_initial_nodes + step
             self.O_mask[step, :valid_nodes] = 1.0
 
-        self.output_selector_head = nn.Linear(in_features, self.dag_depth)
+        self.output_selector_head = nn.Linear(head_input_size, self.dag_depth)
 
         self.reset_parameters()
 
         self._mag_min = 1e-11
-        self._mag_max = 1e6
+        self._mag_max = 1e11
         self._log_lim = math.log(self._mag_max) - 1.0
 
     def reset_parameters(self) -> None:
@@ -144,12 +164,57 @@ class DAGLayer(ExtendedTorchModule):
         nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
         nn.init.zeros_(self.output_selector_head.bias)
 
+    def extract_dense_features(self, input: torch.Tensor) -> torch.Tensor:
+        """Extract dense features from each input element.
+        
+        For each input x, compute: [x, x^2, x^3, exp(x), log(|x|+eps), sin(x), cos(x), tanh(x)]
+        """
+        eps = 1e-6
+        
+        # Basic polynomial features
+        x = input
+        x2 = x * x
+        x3 = x2 * x
+        
+        # Exponential and logarithmic features (with clamping for stability)
+        x_clamped = torch.clamp(x, min=-10.0, max=10.0)  # Prevent exp overflow
+        exp_x = torch.exp(x_clamped)
+        log_abs_x = torch.log(torch.abs(x) + eps)
+        
+        # Trigonometric features
+        sin_x = torch.sin(x)
+        cos_x = torch.cos(x)
+        
+        # Hyperbolic feature
+        tanh_x = torch.tanh(x)
+        
+        # Stack all features along the last dimension
+        # Shape: (B, in_features, dense_features_per_input)
+        dense_features = torch.stack([x, x2, x3, exp_x, log_abs_x, sin_x, cos_x, tanh_x], dim=-1)
+        
+        # Flatten to (B, in_features * dense_features_per_input)
+        B, in_features, _ = dense_features.shape
+        return dense_features.view(B, in_features * self.dense_features_per_input)
+
     def predict_dag_weights(self, input: torch.Tensor, device, dtype, B: int):
         """Predict DAG weights using neural network heads."""
         # Apply input normalization (gated behind flag)
         if self.use_normalization:
-            head_input = self.input_norm(input)
-            head_input = self.head_norm(head_input)
+            # Massive LayerNorm stack to normalize
+            # The comment to the right is the number of steps to grok for ops: mul, add
+            # all seed 33232323
+            head_input = input # inf, inf
+            head_input = self.input_norm(input) # inf, inf
+            head_input = self.extra_norm1(head_input) # inf, 75
+            head_input = self.extra_norm2(head_input) # 1119, 51
+            head_input = self.extra_norm3(head_input) # 649, 52
+            head_input = self.extra_norm4(head_input) # 157, 46
+            head_input = self.extra_norm5(head_input) # 108, 50
+            head_input = self.extra_norm6(head_input) # 216, 46
+            head_input = self.extra_norm7(head_input) # 108, 50
+            head_input = self.extra_norm8(head_input) # 216, 46
+            head_input = self.extra_norm9(head_input) # 108, 50
+            head_input = self.extra_norm10(head_input) # 216, 46 
         else:
             head_input = input
 
