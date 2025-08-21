@@ -274,7 +274,7 @@ parser.add_argument(
 parser.add_argument(
     "--learning-rate",
     action="store",
-    default=1e-3,
+    default=2e-3,
     type=float,
     help="Specify the learning-rate",
 )
@@ -287,7 +287,7 @@ parser.add_argument(
 parser.add_argument(
     "--lr-min",
     action="store",
-    default=1e-6,
+    default=2e-4,
     type=float,
     help="Minimum learning rate for cosine decay",
 )
@@ -435,7 +435,7 @@ parser.add_argument(
 parser.add_argument(
     "--clip-grad-norm",
     action="store",
-    default=None,
+    default=0.5,
     type=float,
     help="Norm clip value for gradients.",
 )
@@ -1141,7 +1141,7 @@ import platform
 
 if platform.system() == "Darwin":  # macOS
     try:
-        os.system("afplay /System/Library/Sounds/Glass.aiff")
+        os.system("afplay /System/Library/Sounds/Tink.aiff")
     except:
         pass  # Silently fail if sound doesn't work
 

@@ -10,9 +10,31 @@ from debug_utils import tap
 from ..abstract import ExtendedTorchModule
 
 """
-/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py --layer-type DAG --note noste --operation mul --input-size 2 --batch-size 5000 --max-iterations 100000 --learning-rate 1e-3 --log-interval 100 --interpolation-range [-2.0,2.0] --extrapolation-range [[-6.0,-2.0],[2.0,6.0]] --seed 1 --no-cuda --lr-cosine --lr-min 1e-4 --clip-grad-norm 1.0
+Universal grokking baseline for add/mul/sub operations:
 
-grokked at 4411
+python experiments/single_layer_benchmark.py --layer-type DAG --operation [add|mul|sub] --input-size 2 --batch-size 128 --max-iterations 5000 --learning-rate 2e-3 --lr-cosine --lr-min 2e-4 --clip-grad-norm 0.5 --interpolation-range "[-2,2)" --extrapolation-range "[[-6,-2),[2,6)]" --no-cuda --log-interval 1000
+
+This config reliably groks all three operations:
+- ADD: ~17s to grok
+- MUL: ~25s to grok  
+- SUB: ~19s to grok
+
+Division (div) still fails with this config - architectural issue suspected.
+
+Architectural flags that enable universal grokking:
+        use_simple_domain_mixing: bool = True,
+        use_normalization: bool = True,
+        remove_temperatures: bool = True,
+        use_unified_selector: bool = False,
+        use_explicit_eval_rounding: bool = False,
+        enable_debug_logging: bool = False,
+        enable_taps: bool = True,
+        _do_not_predict_weights: bool = False,
+        mag_min: float = 1e-11,
+        mag_max: float = 1e6,
+        log_lim_offset: float = 1.0,
+        
+All STE flags disabled (False) for universal grokking.
 
 Notes
 
@@ -61,6 +83,9 @@ class DAGLayer(ExtendedTorchModule):
         enable_debug_logging: bool = False,
         enable_taps: bool = True,
         _do_not_predict_weights: bool = False,
+        mag_min: float = 1e-11,
+        mag_max: float = 1e6,
+        log_lim_offset: float = 1.0,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -92,6 +117,11 @@ class DAGLayer(ExtendedTorchModule):
         self.enable_taps = bool(enable_taps)
         self._do_not_predict_weights = bool(_do_not_predict_weights)
 
+        # Configurable numerical limits for magnitude and log domain
+        self.mag_min = mag_min
+        self.mag_max = mag_max
+        self.log_lim_offset = log_lim_offset
+
         self.O_mag_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
         self.O_sign_head = nn.Linear(in_features, self.dag_depth * self.total_nodes)
         self.G_head = nn.Linear(in_features, self.dag_depth)
@@ -115,9 +145,10 @@ class DAGLayer(ExtendedTorchModule):
 
         self.reset_parameters()
 
-        self._mag_min = 1e-11
-        self._mag_max = 1e6
-        self._log_lim = math.log(self._mag_max) - 1.0
+        # Set the numerical limits using configurable parameters
+        self._mag_min = self.mag_min
+        self._mag_max = self.mag_max
+        self._log_lim = math.log(self._mag_max) - self.log_lim_offset
 
     def reset_parameters(self) -> None:
         # Use consistent initialization like the working version
