@@ -38,7 +38,10 @@ class DAGLayer(ExtendedTorchModule):
         name: str | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        use_ste_G: bool = False,
+        use_ste_G: bool = True,
+        use_ste_sign: bool = True,
+        use_ste_O_mag: bool = True,
+        use_ste_O_sign: bool = True,
         enable_taps: bool = True,
         _do_not_predict_weights: bool = False,
         **kwargs,
@@ -60,6 +63,9 @@ class DAGLayer(ExtendedTorchModule):
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
         self.use_ste_G = bool(use_ste_G)
+        self.use_ste_sign = bool(use_ste_sign)
+        self.use_ste_O_mag = bool(use_ste_O_mag)
+        self.use_ste_O_sign = bool(use_ste_O_sign)
         self.enable_taps = bool(enable_taps)
         self._do_not_predict_weights = bool(_do_not_predict_weights)
 
@@ -113,16 +119,24 @@ class DAGLayer(ExtendedTorchModule):
         O_t_mag = 2.0
         O_t_sign = 8.0
 
-        O_sign_soft = torch.tanh(O_sign_logits / O_t_sign)
-        O_sign_hard = (O_sign_logits >= 0).to(O_sign_logits.dtype) * 2.0 - 1.0
-        O_sign = O_sign_hard + (O_sign_soft - O_sign_soft.detach())
-
+        O_sign = torch.tanh(O_sign_logits / O_t_sign)
         O_mag = torch.nn.functional.softplus(O_mag_logits / O_t_mag)
         O_mag = O_mag * O_mask
+        O_sign = O_sign * O_mask
+        
+        # Apply STEs if enabled
+        if self.use_ste_O_mag:
+            O_mag_hard = (O_mag > 0.5).to(O_mag.dtype)
+            O_mag = O_mag_hard + (O_mag - O_mag.detach())
+            
+        if self.use_ste_O_sign:
+            O_sign_hard = (O_sign > 0.5).to(O_sign.dtype) * 2.0 - 1.0
+            O_sign = O_sign_hard + (O_sign - O_sign.detach())
+        
         O = O_sign * O_mag
         O = tap(O, "O_selector", self.enable_taps)
 
-        G_t = 2.0
+        G_t = 1.0
         eps = 1e-5
         G_logits = self.G_head(input)
         G_logits = tap(G_logits, "G_logits", self.enable_taps)
@@ -144,7 +158,14 @@ class DAGLayer(ExtendedTorchModule):
             G = G_hard + (G - G.detach())
 
         if not self.training:
-            G = (G > 0.5).to(G.dtype)
+            # Only apply eval discretization if STEs are not already handling it
+            if not self.use_ste_G:
+                G = (G > 0.5).to(G.dtype)
+            if not self.use_ste_O_mag:
+                O_mag = (O_mag > 0.5).to(O_mag.dtype)
+            if not self.use_ste_O_sign:
+                # Round O_sign to nearest -1, 1 
+                O_sign = (O_sign > 0.5).to(O_sign.dtype) * 2.0 - 1.0
 
         # Output selector logits
         out_logits = self.output_selector_head(input).to(dtype)
@@ -190,8 +211,11 @@ class DAGLayer(ExtendedTorchModule):
         # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
         log_sign = torch.cos(math.pi * m)
         s = G_step * linear_sign + (1.0 - G_step) * log_sign
-        # STE on s to get hard sign
-        s = self._ste_round(s)
+        
+        # Optional STE on s to get hard sign
+        if self.use_ste_sign:
+            s = self._ste_round(s)
+        
         return s
 
     def soft_floor(self, x: torch.Tensor, min: float, t: float = 1.0) -> torch.Tensor:

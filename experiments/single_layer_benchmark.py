@@ -1004,13 +1004,24 @@ for epoch_i, (x_train, t_train) in zip(
                 print(f"\t\tsign: {rounded_sign}")
                 print(f"\t\tmag: {rounded_mag}")
                 print(f"\t\tvalues: {rounded_values}")
-            if getattr(dag, "use_output_selector", False) and hasattr(
-                dag, "_last_out_logits"
-            ):
-                out_logits0 = dag._last_out_logits[0].detach().cpu().tolist()
-                values0 = dag._last_value_vec_inter[0].detach().cpu().tolist()
-                print(f"out_logits: {[round(v, 5) for v in out_logits0]}")
-                print(f"value_vec_inter: {[round(v, 5) for v in values0]}")
+            
+            # Add output selector information
+            if hasattr(dag, "_last_out_logits"):
+                out_logits0 = dag._last_out_logits[0].detach().cpu()
+                # Convert to one-hot (argmax)
+                selected_idx = torch.argmax(out_logits0).item()
+                one_hot = torch.zeros_like(out_logits0)
+                one_hot[selected_idx] = 1.0
+                
+                print(f"Output Selector:")
+                print(f"\tlogits: {[round(v, 5) for v in out_logits0.tolist()]}")
+                print(f"\tselected (one-hot): {[int(v) for v in one_hot.tolist()]}")
+                print(f"\tselected_node: {selected_idx}")
+                
+                if hasattr(dag, "_last_value_vec_inter"):
+                    values0 = dag._last_value_vec_inter[0].detach().cpu().tolist()
+                    print(f"\tintermediate_values: {[round(v, 5) for v in values0]}")
+                    print(f"\tselected_value: {round(values0[selected_idx], 5)}")
 
     if early_stop:
         print(f"Early stopped at step {epoch_i}")
@@ -1107,6 +1118,15 @@ print(f"  - loss_valid_extra: {loss_valid_extra}")
 print()
 # Skip printing model params for now
 # utils.print_model_params(model)
+
+# Play completion sound on macOS
+import os
+import platform
+if platform.system() == "Darwin":  # macOS
+    try:
+        os.system("afplay /System/Library/Sounds/Glass.aiff")
+    except:
+        pass  # Silently fail if sound doesn't work
 
 if not args.no_save:
     model.writer._root.close()  # fix - close summary writer before saving model to avoid thread locking issues
