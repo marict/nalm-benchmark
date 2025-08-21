@@ -1141,7 +1141,10 @@ import platform
 
 if platform.system() == "Darwin":  # macOS
     try:
-        os.system("afplay /System/Library/Sounds/Glass.aiff")
+        if early_stop:
+            os.system("afplay /System/Library/Sounds/Funk.aiff")
+        else:
+            os.system("afplay /System/Library/Sounds/Submarine.aiff")
     except:
         pass  # Silently fail if sound doesn't work
 

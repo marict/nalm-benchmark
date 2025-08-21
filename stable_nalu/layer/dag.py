@@ -10,11 +10,25 @@ from debug_utils import tap
 from ..abstract import ExtendedTorchModule
 
 """
-/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py --layer-type DAG --note noste --operation mul --input-size 2 --batch-size 5000 --max-iterations 100000 --learning-rate 1e-3 --log-interval 100 --interpolation-range [-2.0,2.0] --extrapolation-range [[-6.0,-2.0],[2.0,6.0]] --seed 1 --no-cuda --lr-cosine --lr-min 1e-4 --clip-grad-norm 1.0
+ python experiments/single_layer_benchmark.py \
+    --layer-type DAG \
+    --operation <add|mul|sub> \
+    --input-size 2 \
+    --batch-size 512 \
+    --max-iterations 3000 \
+    --learning-rate 1e-2 \
+    --interpolation-range "[-2.0,2.0]" \
+    --extrapolation-range "[[-6.0,-2.0],[2.0,6.0]]" \
+    --no-cuda \
+    --lr-cosine \
+    --lr-min 1e-4 \
+    --clip-grad-norm 1.0 \
+    --log-interval 100
 
-grokked at 4411
-
-Notes
+  Results:
+  - Add: Groks at ~100-150 steps
+  - Mul: Groks at ~100-120 steps
+  - Sub: Groks at ~170-200 steps
 
 """
 
