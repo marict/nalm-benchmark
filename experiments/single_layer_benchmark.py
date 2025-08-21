@@ -121,7 +121,6 @@ parser.add_argument(
 parser.add_argument(
     "--seed", action="store", default=0, type=int, help="Specify the seed to use"
 )
-
 parser.add_argument(
     "--interpolation-range",
     action="store",
@@ -507,6 +506,13 @@ parser.add_argument(
     help="Note to add to wandb run name (default: human readable datetime)",
 )
 
+parser.add_argument(
+    "--no-open-browser",
+    action="store_true",
+    default=False,
+    help="Don't open browser for wandb (useful for automated tests)",
+)
+
 args = parser.parse_args()
 
 # Initialize wandb with note
@@ -514,6 +520,7 @@ note = args.note if args.note else get_default_note()
 run = wandb.init_wandb(
     local_project="nalm-benchmark",
     placeholder_name=f"local - {note}",
+    open_browser=not args.no_open_browser,
 )
 
 utils.set_pytorch_precision(args.pytorch_precision)
@@ -988,8 +995,13 @@ for epoch_i, (x_train, t_train) in zip(
             t0 = float(t_train[0].detach().cpu().view(-1)[0].item())
             g_first = dag._last_G[0].detach().cpu().tolist()
             o_first = dag._last_O[0].detach().cpu().tolist()
-            o_sign_first = dag._last_O_sign[0].detach().cpu().tolist()
-            o_mag_first = dag._last_O_mag[0].detach().cpu().tolist()
+            # Robust access to O_sign and O_mag (may not exist in unified selector mode)
+            o_sign_first = getattr(dag, "_last_O_sign", None)
+            o_mag_first = getattr(dag, "_last_O_mag", None)
+            if o_sign_first is not None:
+                o_sign_first = o_sign_first[0].detach().cpu().tolist()
+            if o_mag_first is not None:
+                o_mag_first = o_mag_first[0].detach().cpu().tolist()
             print("First sample statistics:")
             print(f"x0={[round(x, 5) for x in x0]}")
             print(f"y0={round(y0, 5)}")
@@ -998,13 +1010,17 @@ for epoch_i, (x_train, t_train) in zip(
             print("O:")
             for step_idx, step_values in enumerate(o_first):
                 rounded_values = [round(v, 5) for v in step_values]
-                rounded_sign = [round(o, 5) for o in o_sign_first[step_idx]]
-                rounded_mag = [round(o, 5) for o in o_mag_first[step_idx]]
                 print(f"\tStep {step_idx}")
-                print(f"\t\tsign: {rounded_sign}")
-                print(f"\t\tmag: {rounded_mag}")
+
+                # Only print separate sign/mag if they exist (not in unified selector mode)
+                if o_sign_first is not None and o_mag_first is not None:
+                    rounded_sign = [round(o, 5) for o in o_sign_first[step_idx]]
+                    rounded_mag = [round(o, 5) for o in o_mag_first[step_idx]]
+                    print(f"\t\tsign: {rounded_sign}")
+                    print(f"\t\tmag: {rounded_mag}")
+
                 print(f"\t\tvalues: {rounded_values}")
-            
+
             # Add output selector information
             if hasattr(dag, "_last_out_logits"):
                 out_logits0 = dag._last_out_logits[0].detach().cpu()
@@ -1012,12 +1028,12 @@ for epoch_i, (x_train, t_train) in zip(
                 selected_idx = torch.argmax(out_logits0).item()
                 one_hot = torch.zeros_like(out_logits0)
                 one_hot[selected_idx] = 1.0
-                
+
                 print(f"Output Selector:")
                 print(f"\tlogits: {[round(v, 5) for v in out_logits0.tolist()]}")
                 print(f"\tselected (one-hot): {[int(v) for v in one_hot.tolist()]}")
                 print(f"\tselected_node: {selected_idx}")
-                
+
                 if hasattr(dag, "_last_value_vec_inter"):
                     values0 = dag._last_value_vec_inter[0].detach().cpu().tolist()
                     print(f"\tintermediate_values: {[round(v, 5) for v in values0]}")
@@ -1122,6 +1138,7 @@ print()
 # Play completion sound on macOS
 import os
 import platform
+
 if platform.system() == "Darwin":  # macOS
     try:
         os.system("afplay /System/Library/Sounds/Glass.aiff")

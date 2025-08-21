@@ -41,10 +41,8 @@ class GradTap(torch.autograd.Function):
             t = x.detach()
             wandb.wrapper.log(
                 {
-                    f"fw/{tag}/min": float(torch.nan_to_num(t).min()),
                     f"fw/{tag}/max": float(torch.nan_to_num(t).max()),
                     f"fw/{tag}/mean": float(torch.nan_to_num(t).mean()),
-                    f"fw/{tag}/std": float(torch.nan_to_num(t).std()),
                 },
                 step=tap_context.get_epoch_i(),
                 commit=False,
