@@ -10,12 +10,92 @@ import numpy as np
 import runpod_service.wandb_setup as wandb
 import torch
 
+# Enable anomaly detection for debugging gradient issues
+torch.autograd.set_detect_anomaly(True, check_nan=True)
+
 import misc.utils as utils
 import stable_nalu
 import stable_nalu.functional.regualizer as Regualizer
 from debug_utils import tap_context
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
+
+
+def print_dag_internal_state(
+    x_tensor,
+    y_tensor,
+    t_tensor,
+    g_tensor,
+    o_tensor,
+    out_logits_tensor,
+    value_vec_inter_tensor,
+    state_label,
+    o_sign_tensor=None,
+    o_mag_tensor=None,
+):
+    """Print DAG internal state. Extracts [0] from all tensors and formats output."""
+
+    # Extract and convert all tensors
+    x_vals = x_tensor[0].detach().cpu().view(-1).tolist()
+    y_val = float(y_tensor[0].detach().cpu().view(-1)[0].item())
+    t_val = float(t_tensor[0].detach().cpu().view(-1)[0].item())
+    g_state = g_tensor[0].detach().cpu().tolist()
+    o_state = o_tensor[0].detach().cpu().tolist()
+    out_logits_state = out_logits_tensor[0].detach().cpu()
+    value_vec_inter_state = value_vec_inter_tensor[0].detach().cpu().tolist()
+
+    # Handle optional sign/mag tensors
+    o_sign_state = None
+    o_mag_state = None
+    if o_sign_tensor is not None:
+        o_sign_state = o_sign_tensor[0].detach().cpu().tolist()
+    if o_mag_tensor is not None:
+        o_mag_state = o_mag_tensor[0].detach().cpu().tolist()
+
+    print(f"Sample statistics ({state_label} state):")
+    print(f"input={[round(x, 5) for x in x_vals]}")
+    print(f"output={round(y_val, 5)}")
+    print(f"target={round(t_val, 5)}")
+    print(f"G ({state_label.lower()}): {[round(g, 5) for g in g_state]}")
+    print(f"O ({state_label.lower()}):")
+    for step_idx, step_values in enumerate(o_state):
+        rounded_values = [round(v, 5) for v in step_values]
+        g_value = round(g_state[step_idx], 1) if step_idx < len(g_state) else "N/A"
+
+        # Only print separate sign/mag if they exist (not in unified selector mode)
+        if o_sign_state is not None and o_mag_state is not None:
+            rounded_sign = [round(o, 5) for o in o_sign_state[step_idx]]
+            rounded_mag = [round(o, 5) for o in o_mag_state[step_idx]]
+            print(
+                f"    Step {step_idx}: sign ({state_label.lower()}): {rounded_sign} G: {g_value}"
+            )
+            print(
+                f"    Step {step_idx}: mag ({state_label.lower()}): {rounded_mag} G: {g_value}"
+            )
+
+        print(f"    Step {step_idx}: values {rounded_values} G: {g_value}")
+
+    # Add output selector information
+    if out_logits_state is not None:
+        selected_idx = torch.argmax(out_logits_state).item()
+        one_hot = torch.zeros_like(out_logits_state)
+        one_hot[selected_idx] = 1.0
+
+        print(f"Output Selector ({state_label.lower()}):")
+        print(
+            f"\tlogits ({state_label.lower()}): {[round(v, 5) for v in out_logits_state.tolist()]}"
+        )
+        if state_label.upper() == "SOFT":
+            print(f"\tselected (one-hot): {[int(v) for v in one_hot.tolist()]}")
+        print(f"\tselected_node: {selected_idx}")
+
+        if value_vec_inter_state is not None:
+            print(
+                f"\tintermediate_values ({state_label.lower()}): {[round(v, 5) for v in value_vec_inter_state]}"
+            )
+            print(
+                f"\tselected_value ({state_label.lower()}): {round(value_vec_inter_state[selected_idx], 5)}"
+            )
 
 
 class NoOpScheduler:
@@ -513,6 +593,14 @@ parser.add_argument(
     help="Don't open browser for wandb (useful for automated tests)",
 )
 
+parser.add_argument(
+    "--max-target-magnitude",
+    action="store",
+    default=None,
+    type=float,
+    help="Maximum allowed magnitude for target values (filters out extreme division results)",
+)
+
 args = parser.parse_args()
 
 # Initialize wandb with note
@@ -649,6 +737,7 @@ dataset = stable_nalu.dataset.SimpleFunctionStaticDataset(
     simple=args.simple,
     use_cuda=args.cuda,
     seed=args.seed,
+    max_result_magnitude=args.max_target_magnitude,
 )
 print(f"  -")
 print(f"  - dataset: {dataset.print_operation()}")
@@ -897,15 +986,6 @@ for epoch_i, (x_train, t_train) in zip(
     else:
         patience_counter = 0
 
-    # Disable this for now
-    # assert model.training
-
-    # # Per-step clamped (eval-mode) training MSE; not used for backprop
-    # train_eval_error = test_model((x_train, t_train))
-    # log_dict["mse/train_eval"] = float(train_eval_error.detach().cpu().item())
-
-    # assert model.training
-
     # forward
     y_train = model(x_train)
 
@@ -971,10 +1051,14 @@ for epoch_i, (x_train, t_train) in zip(
     log_dict["loss/train"] = float(loss_train_criterion.detach().cpu().item())
     log_dict["mse/inter"] = float(interpolation_error)
 
+    # Log training batch target statistics
+    log_dict["targets/train_mean"] = float(t_train.mean().detach().cpu().item())
+    log_dict["targets/train_max"] = float(t_train.abs().max().detach().cpu().item())
+
     log_dict["lr"] = float(scheduler.get_last_lr()[0])
-    if dag is not None:
-        log_dict["mean/G"] = float(dag._last_G.cpu().mean().item())
-        o_l1_mean = float(dag._last_O.cpu().abs().sum(dim=-1).mean().item())
+    if dag is not None and hasattr(dag, "_last_train_G"):
+        log_dict["mean/G"] = float(dag._last_train_G.cpu().mean().item())
+        o_l1_mean = float(dag._last_train_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
 
     commit = False
@@ -992,60 +1076,50 @@ for epoch_i, (x_train, t_train) in zip(
                 extrapolation_error.detach().cpu().item(),
             )
         )
-        # Inspect gate/selection on the first sample (concise)
-        if dag is not None and hasattr(dag, "_last_G"):
-            x0 = x_train[0].detach().cpu().view(-1).tolist()
-            y0 = float(y_train[0].detach().cpu().view(-1)[0].item())
-            t0 = float(t_train[0].detach().cpu().view(-1)[0].item())
-            g_first = dag._last_G[0].detach().cpu().tolist()
-            o_first = dag._last_O[0].detach().cpu().tolist()
-            # Robust access to O_sign and O_mag (may not exist in unified selector mode)
-            o_sign_first = getattr(dag, "_last_O_sign", None)
-            o_mag_first = getattr(dag, "_last_O_mag", None)
-            if o_sign_first is not None:
-                o_sign_first = o_sign_first[0].detach().cpu().tolist()
-            if o_mag_first is not None:
-                o_mag_first = o_mag_first[0].detach().cpu().tolist()
-            print("First sample statistics:")
-            print(f"x0={[round(x, 5) for x in x0]}")
-            print(f"y0={round(y0, 5)}")
-            print(f"t0={round(t0, 5)}")
-            print(f"G: {[round(g, 5) for g in g_first]}")
-            print("O:")
-            for step_idx, step_values in enumerate(o_first):
-                rounded_values = [round(v, 5) for v in step_values]
-                print(f"\tStep {step_idx}")
 
-                # Only print separate sign/mag if they exist (not in unified selector mode)
-                if o_sign_first is not None and o_mag_first is not None:
-                    rounded_sign = [round(o, 5) for o in o_sign_first[step_idx]]
-                    rounded_mag = [round(o, 5) for o in o_mag_first[step_idx]]
-                    print(f"\t\tsign: {rounded_sign}")
-                    print(f"\t\tmag: {rounded_mag}")
+        # Print extrapolation example after running through model to get internal state
+        if dag is not None:
+            # Get a random extrapolation example
+            x_extra, t_extra = dataset_test_extrapolation_data
+            random_idx = epoch_i % x_extra.size(
+                0
+            )  # Use epoch for reproducible "randomness"
+            x_extra_sample = x_extra[random_idx : random_idx + 1]
+            t_extra_sample = t_extra[random_idx : random_idx + 1]
 
-                print(f"\t\tvalues: {rounded_values}")
+            # Run model on extrapolation sample to get internal state
+            with torch.no_grad(), model.no_internal_logging(), model.no_random():
+                model.eval()
+                y_extra_sample = model(x_extra_sample)
+                model.train()
 
-            # Add output selector information
-            if hasattr(dag, "_last_out_logits"):
-                out_logits0 = dag._last_out_logits[0].detach().cpu()
-                # Convert to one-hot (argmax)
-                selected_idx = torch.argmax(out_logits0).item()
-                one_hot = torch.zeros_like(out_logits0)
-                one_hot[selected_idx] = 1.0
-
-                print(f"Output Selector:")
-                print(f"\tlogits: {[round(v, 5) for v in out_logits0.tolist()]}")
-                print(f"\tselected (one-hot): {[int(v) for v in one_hot.tolist()]}")
-                print(f"\tselected_node: {selected_idx}")
-
-                if hasattr(dag, "_last_value_vec_inter"):
-                    values0 = dag._last_value_vec_inter[0].detach().cpu().tolist()
-                    print(f"\tintermediate_values: {[round(v, 5) for v in values0]}")
-                    print(f"\tselected_value: {round(values0[selected_idx], 5)}")
+            # Print extrapolation example statistics
+            print_dag_internal_state(
+                x_tensor=x_extra_sample,
+                y_tensor=y_extra_sample,
+                t_tensor=t_extra_sample,
+                g_tensor=dag._last_eval_G,
+                o_tensor=dag._last_eval_O,
+                out_logits_tensor=dag._last_eval_out_logits,
+                value_vec_inter_tensor=dag._last_eval_value_vec_inter,
+                state_label="HARDENED eval",
+            )
+            print()  # Add spacing
+            # Inspect gate/selection on the first sample (concise)
+            print_dag_internal_state(
+                x_tensor=x_train,
+                y_tensor=y_train,
+                t_tensor=t_train,
+                g_tensor=dag._last_train_G,
+                o_tensor=dag._last_train_O,
+                out_logits_tensor=dag._last_train_out_logits,
+                value_vec_inter_tensor=dag._last_train_value_vec_inter,
+                state_label="SOFT training",
+            )
 
     if early_stop:
         print(f"Early stopped at step {epoch_i}")
-        wandb.wrapper.log(log_dict, step=epoch_i + 1)
+        wandb.wrapper.log(log_dict, step=epoch_i)
         break
 
     # Optimize model

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import pdb
 
 import torch
 import torch.nn as nn
@@ -124,16 +125,17 @@ class DAGLayer(ExtendedTorchModule):
         if self.use_normalization:
             self.input_norm = nn.LayerNorm(in_features)
             self.head_norm = nn.LayerNorm(head_input_size)
-            self.extra_norm1 = nn.LayerNorm(in_features)
-            self.extra_norm2 = nn.LayerNorm(in_features)
-            self.extra_norm3 = nn.LayerNorm(in_features)
-            self.extra_norm4 = nn.LayerNorm(in_features)
-            self.extra_norm5 = nn.LayerNorm(in_features)
-            self.extra_norm6 = nn.LayerNorm(in_features)
-            self.extra_norm7 = nn.LayerNorm(in_features)
-            self.extra_norm8 = nn.LayerNorm(in_features)
-            self.extra_norm9 = nn.LayerNorm(in_features)
-            self.extra_norm10 = nn.LayerNorm(in_features)
+            self.extra_norm1 = nn.LayerNorm(head_input_size)
+            self.extra_norm2 = nn.LayerNorm(head_input_size)
+            self.extra_norm3 = nn.LayerNorm(head_input_size)
+            self.extra_norm4 = nn.LayerNorm(head_input_size)
+            self.extra_norm5 = nn.LayerNorm(head_input_size)
+            self.extra_norm6 = nn.LayerNorm(head_input_size)
+            self.extra_norm7 = nn.LayerNorm(head_input_size)
+            self.extra_norm8 = nn.LayerNorm(head_input_size)
+            self.extra_norm9 = nn.LayerNorm(head_input_size)
+            self.extra_norm10 = nn.LayerNorm(head_input_size)
+
             self.O_norm = nn.LayerNorm(self.total_nodes)
         else:
             self.input_norm = None
@@ -166,57 +168,63 @@ class DAGLayer(ExtendedTorchModule):
 
     def extract_dense_features(self, input: torch.Tensor) -> torch.Tensor:
         """Extract dense features from each input element.
-        
+
         For each input x, compute: [x, x^2, x^3, exp(x), log(|x|+eps), sin(x), cos(x), tanh(x)]
         """
         eps = 1e-6
-        
+
         # Basic polynomial features
         x = input
         x2 = x * x
         x3 = x2 * x
-        
+
         # Exponential and logarithmic features (with clamping for stability)
         x_clamped = torch.clamp(x, min=-10.0, max=10.0)  # Prevent exp overflow
         exp_x = torch.exp(x_clamped)
         log_abs_x = torch.log(torch.abs(x) + eps)
-        
+
         # Trigonometric features
         sin_x = torch.sin(x)
         cos_x = torch.cos(x)
-        
+
         # Hyperbolic feature
         tanh_x = torch.tanh(x)
-        
+
         # Stack all features along the last dimension
         # Shape: (B, in_features, dense_features_per_input)
-        dense_features = torch.stack([x, x2, x3, exp_x, log_abs_x, sin_x, cos_x, tanh_x], dim=-1)
-        
+        dense_features = torch.stack(
+            [x, x2, x3, exp_x, log_abs_x, sin_x, cos_x, tanh_x], dim=-1
+        )
+
         # Flatten to (B, in_features * dense_features_per_input)
         B, in_features, _ = dense_features.shape
         return dense_features.view(B, in_features * self.dense_features_per_input)
 
     def predict_dag_weights(self, input: torch.Tensor, device, dtype, B: int):
         """Predict DAG weights using neural network heads."""
+        # Extract dense features if enabled
+        if self.use_dense_features:
+            head_input = self.extract_dense_features(input)
+        else:
+            head_input = input
+
         # Apply input normalization (gated behind flag)
         if self.use_normalization:
             # Massive LayerNorm stack to normalize
             # The comment to the right is the number of steps to grok for ops: mul, add
             # all seed 33232323
-            head_input = input # inf, inf
-            head_input = self.input_norm(input) # inf, inf
-            head_input = self.extra_norm1(head_input) # inf, 75
-            head_input = self.extra_norm2(head_input) # 1119, 51
-            head_input = self.extra_norm3(head_input) # 649, 52
-            head_input = self.extra_norm4(head_input) # 157, 46
-            head_input = self.extra_norm5(head_input) # 108, 50
-            head_input = self.extra_norm6(head_input) # 216, 46
-            head_input = self.extra_norm7(head_input) # 108, 50
-            head_input = self.extra_norm8(head_input) # 216, 46
-            head_input = self.extra_norm9(head_input) # 108, 50
-            head_input = self.extra_norm10(head_input) # 216, 46 
-        else:
-            head_input = input
+            if not self.use_dense_features:
+                head_input = self.input_norm(head_input)  # inf, inf
+            head_input = self.extra_norm1(head_input)  # inf, 75
+            head_input = self.extra_norm2(head_input)  # 1119, 51
+            head_input = self.extra_norm3(head_input)  # 649, 52
+            head_input = self.extra_norm4(head_input)  # 157, 46
+            head_input = self.extra_norm5(head_input)  # 108, 50
+            head_input = self.extra_norm6(head_input)  # 216, 46
+            head_input = self.extra_norm7(head_input)  # 108, 50
+            head_input = self.extra_norm8(head_input)  # 216, 46
+            head_input = self.extra_norm9(head_input)  # 108, 50
+            head_input = self.extra_norm10(head_input)  # 216, 46
 
         O_mag_flat = self.O_mag_head(head_input)
         O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
@@ -229,11 +237,11 @@ class DAGLayer(ExtendedTorchModule):
         O_sign_logits = tap(O_sign_logits, "O_sign_logits", self.enable_taps)
 
         O_mask = self.O_mask.to(dtype).to(device)
-        if self._is_nan("O_mag_logits", O_mag_logits) or self._is_nan(
-            "O_sign_logits", O_sign_logits
+        if (
+            self._is_nan("O_mag_logits", O_mag_logits)
+            or self._is_nan("O_sign_logits", O_sign_logits)
+            and self.training
         ):
-            import pdb
-
             pdb.set_trace()
 
         # Apply temperatures (gated behind flag)
@@ -279,7 +287,9 @@ class DAGLayer(ExtendedTorchModule):
         O = tap(O, "O_selector", self.enable_taps)
 
         eps = 1e-5
-        G_input = head_input if self.use_normalization else input
+        G_input = (
+            head_input if (self.use_normalization or self.use_dense_features) else input
+        )
         G_logits = self.G_head(G_input)
         G_logits = tap(G_logits, "G_logits", self.enable_taps)
 
@@ -291,9 +301,7 @@ class DAGLayer(ExtendedTorchModule):
 
         G = eps + (1.0 - 2.0 * eps) * G
         G = tap(G, "G_gate", self.enable_taps)
-        if self._is_nan("G (gate)", G):
-            import pdb
-
+        if self._is_nan("G (gate)", G) and self.training:
             pdb.set_trace()
 
         if self.freeze_g_linear:
@@ -330,7 +338,9 @@ class DAGLayer(ExtendedTorchModule):
                     O = O_sign_discrete * O_mag_discrete
 
         # Output selector logits
-        out_selector_input = head_input if self.use_normalization else input
+        out_selector_input = (
+            head_input if (self.use_normalization or self.use_dense_features) else input
+        )
         out_logits = self.output_selector_head(out_selector_input).to(dtype)
 
         return O, G, out_logits
@@ -426,7 +436,9 @@ class DAGLayer(ExtendedTorchModule):
         V_mag = torch.clamp(V_mag, min=self._mag_min, max=self._mag_max)
         return V_mag
 
-    def _is_nan(self, name: str, tensor: torch.Tensor) -> None:
+    def _is_nan(
+        self, name: str, tensor: torch.Tensor, print_debug: bool = False
+    ) -> None:
         if not torch.isfinite(tensor).all():
             finite_mask = torch.isfinite(tensor)
             bad_idx = torch.nonzero(~finite_mask, as_tuple=False)
@@ -444,10 +456,11 @@ class DAGLayer(ExtendedTorchModule):
                 else float("nan")
             )
 
-            print(
-                f"Non-finite detected in '{name}' (NaN/Inf). First-bad index={first_bad}; "
-                f"min_finite={min_val}, max_finite={max_val}; shape={tuple(tensor.shape)}"
-            )
+            if print_debug:
+                print(
+                    f"Non-finite detected in '{name}' (NaN/Inf). First-bad index={first_bad}; "
+                    f"min_finite={min_val}, max_finite={max_val}; shape={tuple(tensor.shape)}"
+                )
             return True
         return False
 
@@ -460,6 +473,15 @@ class DAGLayer(ExtendedTorchModule):
         device = input.device
         dtype = torch.float64 if device.type != "mps" else torch.float32
         B = input.size(0)
+
+        # During evaluation, greatly relax numerical limits to allow extrapolation
+        if not self.training:
+            orig_mag_min = self._mag_min
+            orig_mag_max = self._mag_max
+            orig_log_lim = self._log_lim
+            self._mag_min = 1e-20  # Much smaller but not zero
+            self._mag_max = 1e20  # Much larger but not infinite
+            self._log_lim = 50.0  # Much larger but not infinite
 
         input = tap(input, "input", self.enable_taps)
         init_sign = torch.where(
@@ -480,9 +502,14 @@ class DAGLayer(ExtendedTorchModule):
             G = self.test_G
             out_logits = self.test_out_logits
 
-        if self.training and not self._do_not_predict_weights:
-            self._last_G = G.detach()
-            self._last_O = O.detach()
+        # Save the weights state after any hardening for logging
+        # Separate tracking for training vs eval states
+        if self.training:
+            self._last_train_G = G.detach()
+            self._last_train_O = O.detach()
+        else:
+            self._last_eval_G = G.detach()
+            self._last_eval_O = O.detach()
 
         working_mag = torch.zeros(B, self.total_nodes, dtype=dtype, device=device)
         working_sign = torch.zeros(B, self.total_nodes, dtype=dtype, device=device)
@@ -516,9 +543,7 @@ class DAGLayer(ExtendedTorchModule):
                 self._debug_R_lin.append(R_mixed.clone())
                 self._debug_R_log.append(R_mixed.clone())
 
-                if self._is_nan("R_mixed", R_mixed):
-                    import pdb
-
+                if self._is_nan("R_mixed", R_mixed) and self.training:
                     pdb.set_trace()
 
                 # For simple mixing, use R_mixed for both sign and magnitude computation
@@ -616,14 +641,11 @@ class DAGLayer(ExtendedTorchModule):
                 self._debug_R_lin.append(R_lin.clone())
                 self._debug_R_log.append(R_log.clone())
 
-                if self._is_nan("R_lin", R_lin):
-                    import pdb
-
+                if self._is_nan("R_lin", R_lin) and self.training:
                     pdb.set_trace()
-                if self._is_nan("R_log", R_log):
-                    import pdb
-
+                if self._is_nan("R_log", R_log) and self.training:
                     pdb.set_trace()
+
                 V_sign_new = self._compute_new_sign(R_lin, working_sign, O_step, G_step)
                 V_mag_new = self._compute_new_magnitude(R_lin, R_log, G_step)
 
@@ -654,10 +676,23 @@ class DAGLayer(ExtendedTorchModule):
         else:
             probs = torch.softmax(out_logits, dim=-1)
             final_value = torch.sum(probs * value_vec_inter, dim=-1)
-            self._last_out_logits = out_logits.detach()
-            self._last_value_vec_inter = value_vec_inter.detach()
+
+        # Always save the current state for logging (captures clamping during eval)
+        # Separate tracking for training vs eval states
+        if self.training:
+            self._last_train_out_logits = out_logits.detach()
+            self._last_train_value_vec_inter = value_vec_inter.detach()
+        else:
+            self._last_eval_out_logits = out_logits.detach()
+            self._last_eval_value_vec_inter = value_vec_inter.detach()
 
         final_value = tap(final_value, "final_value", self.enable_taps)
         self._is_nan("final_value", final_value)
+
+        # Restore original limits after evaluation
+        if not self.training:
+            self._mag_min = orig_mag_min
+            self._mag_max = orig_mag_max
+            self._log_lim = orig_log_lim
 
         return final_value.to(input.dtype).unsqueeze(-1)

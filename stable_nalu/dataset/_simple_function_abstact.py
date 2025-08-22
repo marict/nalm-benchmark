@@ -90,6 +90,7 @@ class SimpleFunctionDataset:
         seed=None,
         use_cuda=False,
         max_size=2**32 - 1,
+        max_result_magnitude=None,
     ):
         super().__init__()
         self._operation_name = operation
@@ -98,6 +99,7 @@ class SimpleFunctionDataset:
         self._use_cuda = use_cuda
         self._rng = np.random.RandomState(seed)
         self._dist_params = dist_params
+        self._max_result_magnitude = max_result_magnitude
 
         if simple:
             self._input_size = 4
@@ -173,6 +175,7 @@ class SimpleFunctionDatasetFork(torch.utils.data.Dataset):
 
         self._subset_ranges = parent.subset_ranges
         self._dist_params: tuple = parent._dist_params
+        self._max_result_magnitude = parent._max_result_magnitude
 
     def _sample(self, lower_bound, upper_bound, batch_size):
         distribution_family = self._dist_params[0]
@@ -278,6 +281,24 @@ class SimpleFunctionDatasetFork(torch.utils.data.Dataset):
 
         # Compute result of arithmetic operation
         output_scalar = self._operation(*subsets)[:, np.newaxis]
+
+        # Filter out samples with extreme target values (especially for division)
+        max_target = 100.0  # Reasonable upper bound for targets
+        if self._max_result_magnitude is not None:
+            max_target = self._max_result_magnitude
+
+        # Keep resampling until we get reasonable targets
+        max_attempts = 100
+        attempt = 0
+        while np.any(np.abs(output_scalar) > max_target) and attempt < max_attempts:
+            attempt += 1
+            # Resample input
+            input_vector = self._multi_sample(batch_size)
+            subsets = [
+                np.sum(input_vector[..., start:end], axis=sum_axies)
+                for start, end in self._subset_ranges
+            ]
+            output_scalar = self._operation(*subsets)[:, np.newaxis]
 
         # If select is an index, just return the content of one row
         if not isinstance(select, slice):
