@@ -19,7 +19,7 @@ class TestDAGSignComputation:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.layer = DAGLayer(4, 1, 3, enable_taps=False)
+        self.layer = DAGLayer(4, 1, 3, _enable_taps=False)
 
     def test_all_arithmetic_operations(self):
         """Test all arithmetic operations with different sign combinations."""
@@ -97,7 +97,7 @@ class TestDAGSignComputation:
         domain_name,
     ):
         """Test a specific operation with manual weights."""
-        layer = DAGLayer(4, 1, 3, enable_taps=False, _do_not_predict_weights=True)
+        layer = DAGLayer(4, 1, 3, _enable_taps=False, _do_not_predict_weights=True)
         layer.eval()
 
         device = next(layer.parameters()).device
@@ -143,7 +143,7 @@ class TestDAGSignComputation:
         """Test that gradients flow properly through the sign computation."""
         print("\n=== Testing Gradient Flow ===")
 
-        layer = DAGLayer(4, 1, 3, enable_taps=False)
+        layer = DAGLayer(4, 1, 3, _enable_taps=False)
         layer.train()
 
         # Test input
@@ -253,7 +253,7 @@ class TestDAGSignComputation:
         """Test that both training and eval modes work correctly."""
         print("\n=== Testing Training vs Eval Modes ===")
 
-        layer = DAGLayer(4, 1, 3, enable_taps=False)
+        layer = DAGLayer(4, 1, 3, _enable_taps=False)
         test_input = torch.tensor([[2.0, -3.0, 1.0, 1.0]], requires_grad=True)
 
         # Test training mode

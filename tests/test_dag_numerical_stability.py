@@ -25,7 +25,7 @@ class TestDAGNumericalStability:
             self.in_features,
             self.out_features,
             self.dag_depth,
-            enable_taps=False,  # Disable debug output for clean testing
+            _enable_taps=False,  # Disable debug output for clean testing
         )
 
         # Test inputs with various ranges to stress-test numerical behavior

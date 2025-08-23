@@ -48,7 +48,7 @@ class TestDAGArithmetic:
             in_features=self.input_size,
             out_features=1,
             dag_depth=self.dag_depth,
-            enable_taps=enable_taps,
+            _enable_taps=enable_taps,
             _do_not_predict_weights=use_test_mode,
         )
 

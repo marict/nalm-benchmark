@@ -13,7 +13,7 @@ class TestComputeAggregates:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.layer = DAGLayer(4, 1, 3, enable_taps=False)
+        self.layer = DAGLayer(4, 1, 3, _enable_taps=False)
         self.layer.eval()
 
     def test_linear_domain_addition(self):

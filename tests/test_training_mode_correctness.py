@@ -100,7 +100,7 @@ def test_single_operation_mode(
     """Test a specific operation in either training or eval mode."""
 
     # Create layer with manual weights
-    layer = DAGLayer(4, 1, 3, enable_taps=False, _do_not_predict_weights=True)
+    layer = DAGLayer(4, 1, 3, _enable_taps=False, _do_not_predict_weights=True)
 
     if training_mode:
         layer.train()
@@ -188,7 +188,7 @@ def test_single_operation_with_logit_strength(
 ):
     """Test operation with specified logit strength."""
 
-    layer = DAGLayer(4, 1, 3, enable_taps=False, _do_not_predict_weights=True)
+    layer = DAGLayer(4, 1, 3, _enable_taps=False, _do_not_predict_weights=True)
 
     if training_mode:
         layer.train()

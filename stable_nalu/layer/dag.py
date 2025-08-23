@@ -66,11 +66,10 @@ class DAGLayer(ExtendedTorchModule):
         name: str | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        enable_debug_logging: bool = False,
-        enable_taps: bool = True,
-        _do_not_predict_weights: bool = False,
         use_dense_features: bool = False,
-        div_regularizer_eps: float = 0.01,
+        _enable_debug_logging: bool = False,
+        _enable_taps: bool = True,
+        _do_not_predict_weights: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -89,11 +88,10 @@ class DAGLayer(ExtendedTorchModule):
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
-        self.enable_debug_logging = bool(enable_debug_logging)
-        self.enable_taps = bool(enable_taps)
+        self.enable_debug_logging = bool(_enable_debug_logging)
+        self.enable_taps = bool(_enable_taps)
         self._do_not_predict_weights = bool(_do_not_predict_weights)
         self.use_dense_features = bool(use_dense_features)
-        self.div_regularizer_eps = div_regularizer_eps
 
         # Calculate input size for heads based on dense features
         if self.use_dense_features:

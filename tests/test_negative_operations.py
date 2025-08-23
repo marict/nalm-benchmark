@@ -24,7 +24,7 @@ def test_negative_operation(
     )
 
     # Create layer with manual weights
-    layer = DAGLayer(4, 1, 3, enable_taps=False, _do_not_predict_weights=True)
+    layer = DAGLayer(4, 1, 3, _enable_taps=False, _do_not_predict_weights=True)
     layer.eval()
 
     device = next(layer.parameters()).device

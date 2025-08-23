@@ -19,7 +19,7 @@ def test_dag_basic_linear_selector() -> None:
         out_features=1,
         dag_depth=1,
         use_attention_selector=False,
-        enable_taps=False,
+        _enable_taps=False,
     )
     _basic_forward(layer)
 
@@ -31,7 +31,7 @@ def test_dag_attention_selector() -> None:
         dag_depth=1,
         use_attention_selector=True,
         selector_dim=8,
-        enable_taps=False,
+        _enable_taps=False,
     )
     _basic_forward(layer)
 
@@ -45,7 +45,7 @@ def test_dag_attention_with_positional_encoding() -> None:
         use_attention_selector=True,
         selector_dim=8,
         use_positional_encoding=True,
-        enable_taps=False,
+        _enable_taps=False,
     )
     layer.eval()
     x = torch.randn(4, 3)
@@ -61,7 +61,7 @@ def test_dag_gradient_flow() -> None:
         out_features=1,
         dag_depth=1,
         use_attention_selector=False,
-        enable_taps=False,
+        _enable_taps=False,
     )
     layer.train()
 
@@ -104,7 +104,7 @@ def test_dag_gradient_flow_attention() -> None:
         dag_depth=2,
         use_attention_selector=True,
         selector_dim=8,
-        enable_taps=False,
+        _enable_taps=False,
     )
     layer.train()
 
@@ -136,7 +136,7 @@ def test_dag_gradient_magnitude_stability() -> None:
         out_features=1,
         dag_depth=1,
         use_attention_selector=False,
-        enable_taps=False,
+        _enable_taps=False,
     )
     layer.train()
 
@@ -167,7 +167,7 @@ def test_dag_gradient_magnitudes() -> None:
         out_features=1,
         dag_depth=1,
         use_attention_selector=False,
-        enable_taps=False,
+        _enable_taps=False,
     )
     layer.train()
 
@@ -217,7 +217,7 @@ def test_dag_gradient_flow_comprehensive() -> None:
         dag_depth=2,
         use_attention_selector=True,
         selector_dim=8,
-        enable_taps=False,
+        _enable_taps=False,
     )
     layer.train()
 
