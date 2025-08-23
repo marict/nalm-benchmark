@@ -9,6 +9,7 @@ from decimal import Decimal
 import numpy as np
 import runpod_service.wandb_setup as wandb
 import torch
+import time
 
 # Enable anomaly detection for debugging gradient issues
 torch.autograd.set_detect_anomaly(True, check_nan=True)
@@ -1166,6 +1167,8 @@ for epoch_i, (x_train, t_train) in zip(
     if early_stop:
         print(f"Early stopped at step {epoch_i}")
         wandb.wrapper.log(log_dict, step=epoch_i)
+        # wait a second for wandb to log
+        time.sleep(1)
         break
 
     # Optimize model

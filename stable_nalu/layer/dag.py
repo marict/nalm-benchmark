@@ -26,10 +26,12 @@ python experiments/single_layer_benchmark.py \
     --clip-grad-norm 1.0 \
     --log-interval 100
 
+  Seed 223
   Results:
-  - Add: Groks at ~100-150 steps
-  - Mul: Groks at ~100-120 steps
-  - Sub: Groks at ~170-200 steps
+  - Add: Groks at 1318 steps
+  - Mul: Groks at 84 steps
+  - Sub: Groks at 84 steps
+  - Div: Groks at 423 steps
 
 """
 
@@ -64,15 +66,8 @@ class DAGLayer(ExtendedTorchModule):
         name: str | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        use_ste_G: bool = False,  # try
-        use_ste_sign: bool = False,  # try
-        use_ste_O_mag: bool = False,  # try
-        use_ste_O_sign: bool = False,  # try
         use_simple_domain_mixing: bool = True,
-        use_normalization: bool = True,
-        remove_temperatures: bool = True,
-        use_unified_selector: bool = False,
-        use_explicit_eval_rounding: bool = False,
+        use_explicit_eval_rounding: bool = True,
         enable_debug_logging: bool = False,
         enable_taps: bool = True,
         _do_not_predict_weights: bool = False,
@@ -97,14 +92,7 @@ class DAGLayer(ExtendedTorchModule):
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
-        self.use_ste_G = bool(use_ste_G)
-        self.use_ste_sign = bool(use_ste_sign)
-        self.use_ste_O_mag = bool(use_ste_O_mag)
-        self.use_ste_O_sign = bool(use_ste_O_sign)
         self.use_simple_domain_mixing = bool(use_simple_domain_mixing)
-        self.use_normalization = bool(use_normalization)
-        self.remove_temperatures = bool(remove_temperatures)
-        self.use_unified_selector = bool(use_unified_selector)
         self.use_explicit_eval_rounding = bool(use_explicit_eval_rounding)
         self.enable_debug_logging = bool(enable_debug_logging)
         self.enable_taps = bool(enable_taps)
@@ -126,25 +114,20 @@ class DAGLayer(ExtendedTorchModule):
         self.G_head = nn.Linear(head_input_size, self.dag_depth)
 
         # Add normalization layers (gated behind flag)
-        if self.use_normalization:
-            self.input_norm = nn.LayerNorm(in_features)
-            self.head_norm = nn.LayerNorm(head_input_size)
-            self.extra_norm1 = nn.LayerNorm(head_input_size)
-            self.extra_norm2 = nn.LayerNorm(head_input_size)
-            self.extra_norm3 = nn.LayerNorm(head_input_size)
-            self.extra_norm4 = nn.LayerNorm(head_input_size)
-            self.extra_norm5 = nn.LayerNorm(head_input_size)
-            self.extra_norm6 = nn.LayerNorm(head_input_size)
-            self.extra_norm7 = nn.LayerNorm(head_input_size)
-            self.extra_norm8 = nn.LayerNorm(head_input_size)
-            self.extra_norm9 = nn.LayerNorm(head_input_size)
-            self.extra_norm10 = nn.LayerNorm(head_input_size)
+        self.input_norm = nn.LayerNorm(in_features)
+        self.head_norm = nn.LayerNorm(head_input_size)
+        self.extra_norm1 = nn.LayerNorm(head_input_size)
+        self.extra_norm2 = nn.LayerNorm(head_input_size)
+        self.extra_norm3 = nn.LayerNorm(head_input_size)
+        self.extra_norm4 = nn.LayerNorm(head_input_size)
+        self.extra_norm5 = nn.LayerNorm(head_input_size)
+        self.extra_norm6 = nn.LayerNorm(head_input_size)
+        self.extra_norm7 = nn.LayerNorm(head_input_size)
+        self.extra_norm8 = nn.LayerNorm(head_input_size)
+        self.extra_norm9 = nn.LayerNorm(head_input_size)
+        self.extra_norm10 = nn.LayerNorm(head_input_size)
 
-            self.O_norm = nn.LayerNorm(self.total_nodes)
-        else:
-            self.input_norm = None
-            self.head_norm = None
-            self.O_norm = None
+        self.O_norm = nn.LayerNorm(self.total_nodes)
 
         self.O_mask = torch.zeros(self.dag_depth, self.total_nodes)
         for step in range(self.dag_depth):
@@ -213,22 +196,21 @@ class DAGLayer(ExtendedTorchModule):
             head_input = input
 
         # Apply input normalization (gated behind flag)
-        if self.use_normalization:
-            # Massive LayerNorm stack to normalize
-            # The comment to the right is the number of steps to grok for ops: mul, add
-            # all seed 33232323
-            if not self.use_dense_features:
-                head_input = self.input_norm(head_input)  # inf, inf
-            head_input = self.extra_norm1(head_input)  # inf, 75
-            head_input = self.extra_norm2(head_input)  # 1119, 51
-            head_input = self.extra_norm3(head_input)  # 649, 52
-            head_input = self.extra_norm4(head_input)  # 157, 46
-            head_input = self.extra_norm5(head_input)  # 108, 50
-            head_input = self.extra_norm6(head_input)  # 216, 46
-            head_input = self.extra_norm7(head_input)  # 108, 50
-            head_input = self.extra_norm8(head_input)  # 216, 46
-            head_input = self.extra_norm9(head_input)  # 108, 50
-            head_input = self.extra_norm10(head_input)  # 216, 46
+        # Massive LayerNorm stack to normalize
+        # The comment to the right is the number of steps to grok for ops: mul, add
+        # all seed 33232323
+        if not self.use_dense_features:
+            head_input = self.input_norm(head_input)  # inf, inf
+        head_input = self.extra_norm1(head_input)  # inf, 75
+        head_input = self.extra_norm2(head_input)  # 1119, 51
+        head_input = self.extra_norm3(head_input)  # 649, 52
+        head_input = self.extra_norm4(head_input)  # 157, 46
+        head_input = self.extra_norm5(head_input)  # 108, 50
+        head_input = self.extra_norm6(head_input)  # 216, 46
+        head_input = self.extra_norm7(head_input)  # 108, 50
+        head_input = self.extra_norm8(head_input)  # 216, 46
+        head_input = self.extra_norm9(head_input)  # 108, 50
+        head_input = self.extra_norm10(head_input)  # 216, 46
 
         O_mag_flat = self.O_mag_head(head_input)
         O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
@@ -248,61 +230,20 @@ class DAGLayer(ExtendedTorchModule):
         ):
             pdb.set_trace()
 
-        # Apply temperatures (gated behind flag)
-        if self.remove_temperatures:
-            # Use raw logits like the working version
-            O_sign = torch.tanh(O_sign_logits)
-            O_mag = torch.nn.functional.softplus(O_mag_logits)
-        else:
-            # Original version with temperatures
-            O_t_mag = 2.0
-            O_t_sign = 8.0
-            O_sign = torch.tanh(O_sign_logits / O_t_sign)
-            O_mag = torch.nn.functional.softplus(O_mag_logits / O_t_mag)
+        # Use raw logits like the working version
+        O_sign = torch.tanh(O_sign_logits)
+        O_mag = torch.nn.functional.softplus(O_mag_logits)
 
         O_mag = O_mag * O_mask
         O_sign = O_sign * O_mask
-
-        # Choose selector representation (gated behind flag)
-        if self.use_unified_selector:
-            # Unified approach like working version
-            O_combined = O_sign * O_mag
-            if self.use_normalization and self.O_norm is not None:
-                O_combined = self.O_norm(O_combined)
-
-            # Apply STEs if enabled
-            if self.use_ste_O_mag or self.use_ste_O_sign:
-                O_hard = torch.round(O_combined).clamp(-1.0, 1.0)
-                O = O_hard + (O_combined - O_combined.detach())
-            else:
-                O = O_combined
-        else:
-            # Original separate selector approach
-            if self.use_ste_O_mag:
-                O_mag_hard = (O_mag > 0.5).to(O_mag.dtype)
-                O_mag = O_mag_hard + (O_mag - O_mag.detach())
-
-            if self.use_ste_O_sign:
-                O_sign_hard = (O_sign > 0.5).to(O_sign.dtype) * 2.0 - 1.0
-                O_sign = O_sign_hard + (O_sign - O_sign.detach())
-
-            O = O_sign * O_mag
-
+        O = O_sign * O_mag
         O = tap(O, "O_selector", self.enable_taps)
 
         eps = 1e-5
-        G_input = (
-            head_input if (self.use_normalization or self.use_dense_features) else input
-        )
-        G_logits = self.G_head(G_input)
+        G_logits = self.G_head(head_input)
         G_logits = tap(G_logits, "G_logits", self.enable_taps)
 
-        if self.remove_temperatures:
-            G = torch.sigmoid(G_logits).to(dtype)  # Remove temperature
-        else:
-            G_t = 1.0
-            G = torch.sigmoid(G_logits / G_t).to(dtype)  # Original with temperature
-
+        G = torch.sigmoid(G_logits).to(dtype)
         G = eps + (1.0 - 2.0 * eps) * G
         G = tap(G, "G_gate", self.enable_taps)
         if self._is_nan("G (gate)", G) and self.training:
@@ -313,24 +254,16 @@ class DAGLayer(ExtendedTorchModule):
         if self.freeze_g_log:
             G = torch.zeros_like(G)
 
-        if self.use_ste_G:
-            G_hard = (G > 0.5).to(G.dtype)
-            G = G_hard + (G - G.detach())
-
         if not self.training:
             # Only apply eval discretization if STEs are not already handling it
-            if not self.use_ste_G:
-                G = (G > 0.5).to(G.dtype)
+            G = (G > 0.5).to(G.dtype)
 
             # Explicit eval rounding (gated behind flag)
             if self.use_explicit_eval_rounding:
-                if not (self.use_ste_O_mag or self.use_ste_O_sign):
-                    O = torch.round(O).clamp(-1.0, 1.0)
+                O = torch.round(O).clamp(-1.0, 1.0)
             else:
                 # Original eval discretization only applies if not using unified selector
-                if not self.use_unified_selector and not (
-                    self.use_ste_O_mag or self.use_ste_O_sign
-                ):
+                if not self.use_unified_selector:
                     # Extract components for discretization
                     O_sign_discrete = torch.where(
                         O >= 0,
@@ -342,10 +275,7 @@ class DAGLayer(ExtendedTorchModule):
                     O = O_sign_discrete * O_mag_discrete
 
         # Output selector logits
-        out_selector_input = (
-            head_input if (self.use_normalization or self.use_dense_features) else input
-        )
-        out_logits = self.output_selector_head(out_selector_input).to(dtype)
+        out_logits = self.output_selector_head(head_input).to(dtype)
 
         return O, G, out_logits
 
@@ -401,10 +331,6 @@ class DAGLayer(ExtendedTorchModule):
         # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
         log_sign = torch.cos(math.pi * m)
         s = G_step * linear_sign + (1.0 - G_step) * log_sign
-
-        # Optional STE on s to get hard sign
-        if self.use_ste_sign:
-            s = self._ste_round(s)
 
         return s
 
