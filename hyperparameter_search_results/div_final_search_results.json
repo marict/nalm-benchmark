@@ -1,0 +1,413 @@
+{
+  "search_summary": {
+    "total": 15,
+    "grokking": 0,
+    "excellent": 0,
+    "good": 0
+  },
+  "results": [
+    {
+      "experiment_id": 0,
+      "config": {
+        "layer_type": "DAG",
+        "learning_rate": 5e-06,
+        "clip_grad_norm": 0.005,
+        "batch_size": 64,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 42
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.69414496421814,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 10000\n  - batch_size: 64\n  - seed: 42\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_0\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/eb4k85cg\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202212-eb4k85cg/logs\u001b[0m\n",
+      "stderr": "k85cg\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 2,
+      "config": {
+        "layer_type": "NALU",
+        "learning_rate": 0.0001,
+        "clip_grad_norm": 0.1,
+        "batch_size": 128,
+        "max_target_magnitude": 10.0,
+        "div_regularizer": 0.01,
+        "regualizer": 10.0,
+        "regualizer_z": 1.0,
+        "regualizer_oob": 1.0,
+        "seed": 42
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 67.20236992835999,
+      "final_losses": {
+        "train": 562.3416748047,
+        "interpolation": 431.0291137695,
+        "extrapolation": 9.9533948898,
+        "best_interpolation": 431.0291137695
+      },
+      "best_interpolation_loss": 431.0291137695,
+      "stdout": "ve_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.1\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n  - dataset: sum(v[0:1]) / sum(v[1:2])\nSingleLayerNetwork(\n  unit_name=NALU, input_size=2\n  (layer_1): GeneralizedLayer(\n    in_features=2, out_features=1, unit_name=NALU\n    (layer): NALULayer(\n      in_features=2, out_features=1, eps=1e-07, nalu_two_nac=False, nalu_bias=False\n      (nac_add): NACLayer(in_features=2, out_features=1)\n    )\n  )\n)\n\n\n============================================================\n\ud83d\udcca BINNED MSE ANALYSIS SETUP\n============================================================\n\ud83d\udcc8 Input tensor shape: torch.Size([10000, 2])\n\ud83d\udd22 Number of bins: 5\n\ud83d\udccf min|x| range: [0.000481, 1.957353]\n\n\ud83d\udccb Bin boundaries (quantile-based):\n   Bin 0: min|x| \u2264 0.246232\n   Bin 1: 0.246232 < min|x| \u2264 0.475309\n   Bin 2: 0.475309 < min|x| \u2264 0.749772\n   Bin 3: 0.749772 < min|x| \u2264 1.103968\n   Bin 4: min|x| > 1.103968\n\n\ud83c\udfaf Sample distribution per bin:\n   Bin 0: 2000 samples\n   Bin 1: 2000 samples\n   Bin 2: 2000 samples\n   Bin 3: 2000 samples\n   Bin 4: 2000 samples\n============================================================\ntrain 0: 513.1099853516, inter: 468.3221130371, extra: 10.1556653976\ntrain 1000: 11.7288675308, inter: 465.0295410156, extra: 10.1441764832\ntrain 2000: 302.4790039062, inter: 460.6597900391, extra: 10.1331167221\ntrain 3000: 8.9304637909, inter: 456.9806518555, extra: 10.1184482574\ntrain 4000: 145.4177093506, inter: 452.4453430176, extra: 10.1039466858\ntrain 5000: 14.5537862778, inter: 450.0069885254, extra: 10.0862560272\ntrain 6000: 651.1625976562, inter: 445.7264099121, extra: 10.0679712296\ntrain 7000: 34.6855888367, inter: 442.0867919922, extra: 10.0428876877\ntrain 8000: 10.0025672913, inter: 438.1933593750, extra: 10.0189580917\ntrain 9000: 10.4606389999, inter: 434.0991516113, extra: 9.9867267609\ntrain 10000: 562.3416748047, inter: 431.0291137695, extra: 9.9533948898\nfinished:\n  - loss_train_capped: 562.333251953125\n  - loss_train (+reg loss): 562.3465576171875\n  - loss_train_criterion: 562.3416748046875\n  - loss_valid_inter: 431.03680419921875\n  - loss_valid_extra: 9.953351974487305\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_2\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/50qihrb1\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202212-50qihrb1/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_202212-50qihrb1\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_2\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/50qihrb1\n"
+    },
+    {
+      "experiment_id": 3,
+      "config": {
+        "layer_type": "NALU",
+        "learning_rate": 5e-05,
+        "clip_grad_norm": 0.01,
+        "batch_size": 64,
+        "max_target_magnitude": 5.0,
+        "div_regularizer": 0.1,
+        "regualizer": 50.0,
+        "regualizer_z": 10.0,
+        "regualizer_oob": 10.0,
+        "seed": 42
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 66.5692949295044,
+      "final_losses": {
+        "train": 13.472735405,
+        "interpolation": 447.3489379883,
+        "extrapolation": 10.0745372772,
+        "best_interpolation": 447.3489379883
+      },
+      "best_interpolation_loss": 447.3489379883,
+      "stdout": "xisting_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.01\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n  - dataset: sum(v[0:1]) / sum(v[1:2])\nSingleLayerNetwork(\n  unit_name=NALU, input_size=2\n  (layer_1): GeneralizedLayer(\n    in_features=2, out_features=1, unit_name=NALU\n    (layer): NALULayer(\n      in_features=2, out_features=1, eps=1e-07, nalu_two_nac=False, nalu_bias=False\n      (nac_add): NACLayer(in_features=2, out_features=1)\n    )\n  )\n)\n\n\n============================================================\n\ud83d\udcca BINNED MSE ANALYSIS SETUP\n============================================================\n\ud83d\udcc8 Input tensor shape: torch.Size([10000, 2])\n\ud83d\udd22 Number of bins: 5\n\ud83d\udccf min|x| range: [0.000481, 1.966961]\n\n\ud83d\udccb Bin boundaries (quantile-based):\n   Bin 0: min|x| \u2264 0.280090\n   Bin 1: 0.280090 < min|x| \u2264 0.515807\n   Bin 2: 0.515807 < min|x| \u2264 0.779945\n   Bin 3: 0.779945 < min|x| \u2264 1.129887\n   Bin 4: min|x| > 1.129887\n\n\ud83c\udfaf Sample distribution per bin:\n   Bin 0: 2000 samples\n   Bin 1: 2000 samples\n   Bin 2: 2000 samples\n   Bin 3: 2000 samples\n   Bin 4: 2000 samples\n============================================================\ntrain 0: 1017.6019287109, inter: 470.3447570801, extra: 10.1556653976\ntrain 1000: 147.8167724609, inter: 467.6190490723, extra: 10.1503276825\ntrain 2000: 97.0517883301, inter: 465.3536071777, extra: 10.1439847946\ntrain 3000: 80.7894592285, inter: 463.0452575684, extra: 10.1373109818\ntrain 4000: 5.9625382423, inter: 460.5237121582, extra: 10.1299247742\ntrain 5000: 12.8489685059, inter: 458.7467956543, extra: 10.1225948334\ntrain 6000: 347.9131469727, inter: 455.8492431641, extra: 10.1140861511\ntrain 7000: 29.4559650421, inter: 453.4816894531, extra: 10.1063938141\ntrain 8000: 37.4539413452, inter: 450.9791870117, extra: 10.0969886780\ntrain 9000: 6.3084564209, inter: 449.0906372070, extra: 10.0868082047\ntrain 10000: 13.4727354050, inter: 447.3489379883, extra: 10.0745372772\nfinished:\n  - loss_train_capped: 13.472677230834961\n  - loss_train (+reg loss): 13.489043235778809\n  - loss_train_criterion: 13.472735404968262\n  - loss_valid_inter: 447.3458557128906\n  - loss_valid_extra: 10.07452392578125\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_3\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/nm4p1xee\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202220-nm4p1xee/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_202220-nm4p1xee\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_3\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/nm4p1xee\n"
+    },
+    {
+      "experiment_id": 4,
+      "config": {
+        "layer_type": "DAG",
+        "learning_rate": 5e-06,
+        "clip_grad_norm": 0.005,
+        "batch_size": 64,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 123
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.955129146575928,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 10000\n  - batch_size: 64\n  - seed: 123\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_4\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/n0imu4sn\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202320-n0imu4sn/logs\u001b[0m\n",
+      "stderr": "mu4sn\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 6,
+      "config": {
+        "layer_type": "NALU",
+        "learning_rate": 0.0001,
+        "clip_grad_norm": 0.1,
+        "batch_size": 128,
+        "max_target_magnitude": 10.0,
+        "div_regularizer": 0.01,
+        "regualizer": 10.0,
+        "regualizer_z": 1.0,
+        "regualizer_oob": 1.0,
+        "seed": 123
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 65.37872099876404,
+      "final_losses": {
+        "train": 6.780216217,
+        "interpolation": 8.7812070847,
+        "extrapolation": 5.2013630867,
+        "best_interpolation": 8.7812070847
+      },
+      "best_interpolation_loss": 8.7812070847,
+      "stdout": "name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.1\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n  - dataset: sum(v[0:1]) / sum(v[1:2])\nSingleLayerNetwork(\n  unit_name=NALU, input_size=2\n  (layer_1): GeneralizedLayer(\n    in_features=2, out_features=1, unit_name=NALU\n    (layer): NALULayer(\n      in_features=2, out_features=1, eps=1e-07, nalu_two_nac=False, nalu_bias=False\n      (nac_add): NACLayer(in_features=2, out_features=1)\n    )\n  )\n)\n\n\n============================================================\n\ud83d\udcca BINNED MSE ANALYSIS SETUP\n============================================================\n\ud83d\udcc8 Input tensor shape: torch.Size([10000, 2])\n\ud83d\udd22 Number of bins: 5\n\ud83d\udccf min|x| range: [0.000481, 1.957353]\n\n\ud83d\udccb Bin boundaries (quantile-based):\n   Bin 0: min|x| \u2264 0.246232\n   Bin 1: 0.246232 < min|x| \u2264 0.475309\n   Bin 2: 0.475309 < min|x| \u2264 0.749772\n   Bin 3: 0.749772 < min|x| \u2264 1.103968\n   Bin 4: min|x| > 1.103968\n\n\ud83c\udfaf Sample distribution per bin:\n   Bin 0: 2000 samples\n   Bin 1: 2000 samples\n   Bin 2: 2000 samples\n   Bin 3: 2000 samples\n   Bin 4: 2000 samples\n============================================================\ntrain 0: 8.3390369415, inter: 9.4280576706, extra: 6.0093665123\ntrain 1000: 9.4682579041, inter: 9.3630943298, extra: 5.4991908073\ntrain 2000: 4.2975611687, inter: 9.2988319397, extra: 5.2126693726\ntrain 3000: 9.5168647766, inter: 9.2354717255, extra: 5.1192517281\ntrain 4000: 7.6755590439, inter: 9.1739072800, extra: 5.1161584854\ntrain 5000: 8.5588226318, inter: 9.1149606705, extra: 5.1476922035\ntrain 6000: 8.1103210449, inter: 9.0544614792, extra: 5.1804738045\ntrain 7000: 10.0514431000, inter: 8.9902715683, extra: 5.2044115067\ntrain 8000: 18.0496425629, inter: 8.9237556458, extra: 5.2116861343\ntrain 9000: 8.8630599976, inter: 8.8550910950, extra: 5.2121205330\ntrain 10000: 6.7802162170, inter: 8.7812070847, extra: 5.2013630867\nfinished:\n  - loss_train_capped: 6.7801923751831055\n  - loss_train (+reg loss): 6.79049015045166\n  - loss_train_criterion: 6.780216217041016\n  - loss_valid_inter: 8.781140327453613\n  - loss_valid_extra: 5.201370716094971\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_6\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/vm1if0jh\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202327-vm1if0jh/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_202327-vm1if0jh\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_6\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/vm1if0jh\n"
+    },
+    {
+      "experiment_id": 7,
+      "config": {
+        "layer_type": "NALU",
+        "learning_rate": 5e-05,
+        "clip_grad_norm": 0.01,
+        "batch_size": 64,
+        "max_target_magnitude": 5.0,
+        "div_regularizer": 0.1,
+        "regualizer": 50.0,
+        "regualizer_z": 10.0,
+        "regualizer_oob": 10.0,
+        "seed": 123
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 67.25925898551941,
+      "final_losses": {
+        "train": 2.6619148254,
+        "interpolation": 4.0063357353,
+        "extrapolation": 5.3881893158,
+        "best_interpolation": 4.0063357353
+      },
+      "best_interpolation_loss": 4.0063357353,
+      "stdout": "name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.01\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n  - dataset: sum(v[0:1]) / sum(v[1:2])\nSingleLayerNetwork(\n  unit_name=NALU, input_size=2\n  (layer_1): GeneralizedLayer(\n    in_features=2, out_features=1, unit_name=NALU\n    (layer): NALULayer(\n      in_features=2, out_features=1, eps=1e-07, nalu_two_nac=False, nalu_bias=False\n      (nac_add): NACLayer(in_features=2, out_features=1)\n    )\n  )\n)\n\n\n============================================================\n\ud83d\udcca BINNED MSE ANALYSIS SETUP\n============================================================\n\ud83d\udcc8 Input tensor shape: torch.Size([10000, 2])\n\ud83d\udd22 Number of bins: 5\n\ud83d\udccf min|x| range: [0.000481, 1.966961]\n\n\ud83d\udccb Bin boundaries (quantile-based):\n   Bin 0: min|x| \u2264 0.280090\n   Bin 1: 0.280090 < min|x| \u2264 0.515807\n   Bin 2: 0.515807 < min|x| \u2264 0.779945\n   Bin 3: 0.779945 < min|x| \u2264 1.129887\n   Bin 4: min|x| > 1.129887\n\n\ud83c\udfaf Sample distribution per bin:\n   Bin 0: 2000 samples\n   Bin 1: 2000 samples\n   Bin 2: 2000 samples\n   Bin 3: 2000 samples\n   Bin 4: 2000 samples\n============================================================\ntrain 0: 3.8473360538, inter: 4.2099642754, extra: 6.0093665123\ntrain 1000: 2.2434301376, inter: 4.1808776855, extra: 5.6532325745\ntrain 2000: 3.9489920139, inter: 4.1543326378, extra: 5.4045233727\ntrain 3000: 3.7450790405, inter: 4.1289739609, extra: 5.2545156479\ntrain 4000: 3.6042046547, inter: 4.1061844826, extra: 5.1871118546\ntrain 5000: 2.4205446243, inter: 4.0852003098, extra: 5.1774306297\ntrain 6000: 2.8113975525, inter: 4.0665478706, extra: 5.2015748024\ntrain 7000: 6.7112402916, inter: 4.0497250557, extra: 5.2447247505\ntrain 8000: 3.9279596806, inter: 4.0342168808, extra: 5.2957367897\ntrain 9000: 3.6709465981, inter: 4.0195994377, extra: 5.3459835052\ntrain 10000: 2.6619148254, inter: 4.0063357353, extra: 5.3881893158\nfinished:\n  - loss_train_capped: 2.6619086265563965\n  - loss_train (+reg loss): 2.788349151611328\n  - loss_train_criterion: 2.661914825439453\n  - loss_valid_inter: 4.006321907043457\n  - loss_valid_extra: 5.388233184814453\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_7\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/6d8p2nfc\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202433-6d8p2nfc/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_202433-6d8p2nfc\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_7\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/6d8p2nfc\n"
+    },
+    {
+      "experiment_id": 8,
+      "config": {
+        "layer_type": "DAG",
+        "learning_rate": 5e-06,
+        "clip_grad_norm": 0.005,
+        "batch_size": 64,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 456
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 8.241534948348999,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 10000\n  - batch_size: 64\n  - seed: 456\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_8\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/iedt4pvi\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202540-iedt4pvi/logs\u001b[0m\n",
+      "stderr": "t4pvi\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 1,
+      "config": {
+        "layer_type": "DAG",
+        "learning_rate": 1e-05,
+        "clip_grad_norm": 0.01,
+        "batch_size": 128,
+        "max_target_magnitude": 10.0,
+        "num_subsets": 2,
+        "div_regularizer": 0.001,
+        "seed": 42
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 474.8289520740509,
+      "final_losses": {
+        "train": 4.1318583488,
+        "interpolation": 4.9370102882,
+        "extrapolation": 1.4504537582,
+        "best_interpolation": 4.9370102882
+      },
+      "best_interpolation_loss": 4.9370102882,
+      "stdout": ".49342, target=2.01313\nG (soft training): [0.5278, 0.51765, 0.50288]\n    Step 0:\n        selectors: [0.01934, -0.02582, 0.0, 0.0, 0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 1.0\n    Step 1:\n        selectors: [0.00785, -0.0084, -0.00697, 0.0, -0.0]\n        inputs:    [-3.78475, -4.28021, 1.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 1.0\n    Step 2:\n        selectors: [0.00284, -0.02742, 0.03219, -0.00526, 0.0]\n        inputs:    [-3.78475, -4.28021, 1.0, 1.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\nOutput Selector (soft training):\n\tlogits (soft training): [0.06998, -0.06851, 0.01941]\n\tselected_node: 0\n\tintermediate_values (soft training): [0.47979, 0.48506, 0.51541]\n\tselected_value (soft training): 0.47979\ntrain 10000: 4.1318583488, inter: 4.9370102882, extra: 1.4504537582\nSample statistics (HARDENED eval state):\ninput=[-3.86695, -4.7358]\noutput=0.0, target=0.81654\nG (hardened eval): [0.0, 0.0, 1.0]\n    Step 0:\n        selectors: [0.0, 0.0, 0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.0 \u2192 computed_value: 1.0\n    Step 1:\n        selectors: [0.0, 0.0, 0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 1.0, 0.0, 0.0]\n        G: 0.0 \u2192 computed_value: 1.0\n    Step 2:\n        selectors: [0.0, 0.0, -0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 1.0, 1.0, 0.0]\n        G: 1.0 \u2192 computed_value: 0.0\nOutput Selector (hardened eval):\n\tlogits (hardened eval): [-0.01979, 0.00281, 0.02591]\n\tselected_node: 2\n\tintermediate_values (hardened eval): [1.0, 1.0, 0.0]\n\tselected_value (hardened eval): 0.0\nSample statistics (SOFT training state):\ninput=[0.61904, 0.43726]\noutput=0.0, target=1.41572\nG (soft training): [0.48885, 0.49702, 0.5137]\n    Step 0:\n        selectors: [0.02528, 0.0685, -0.0, -0.0, -0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 1.0\n    Step 1:\n        selectors: [0.01286, 0.01006, 0.03677, -0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 1.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 1.0\n    Step 2:\n        selectors: [0.01501, 0.04399, -0.01243, 0.00456, -0.0]\n        inputs:    [-3.86695, -4.7358, 1.0, 1.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\nOutput Selector (soft training):\n\tlogits (soft training): [-0.01979, 0.00281, 0.02591]\n\tselected_node: 2\n\tintermediate_values (soft training): [0.01139, 0.00259, -0.01341]\n\tselected_value (soft training): -0.01341\nfinished:\n  - loss_train_capped: 4.473305702209473\n  - loss_train (+reg loss): 4.1318583488464355\n  - loss_train_criterion: 4.1318583488464355\n  - loss_valid_inter: 4.937009334564209\n  - loss_valid_extra: 1.450453758239746\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_1\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/5tqowt99\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202212-5tqowt99/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_202212-5tqowt99\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_1\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/5tqowt99\n"
+    },
+    {
+      "experiment_id": 10,
+      "config": {
+        "layer_type": "NALU",
+        "learning_rate": 0.0001,
+        "clip_grad_norm": 0.1,
+        "batch_size": 128,
+        "max_target_magnitude": 10.0,
+        "div_regularizer": 0.01,
+        "regualizer": 10.0,
+        "regualizer_z": 1.0,
+        "regualizer_oob": 1.0,
+        "seed": 456
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 68.48957705497742,
+      "final_losses": {
+        "train": 4.9921588898,
+        "interpolation": 5.9108362198,
+        "extrapolation": 3.216530323,
+        "best_interpolation": 5.9108362198
+      },
+      "best_interpolation_loss": 5.9108362198,
+      "stdout": "name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.1\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n  - dataset: sum(v[0:1]) / sum(v[1:2])\nSingleLayerNetwork(\n  unit_name=NALU, input_size=2\n  (layer_1): GeneralizedLayer(\n    in_features=2, out_features=1, unit_name=NALU\n    (layer): NALULayer(\n      in_features=2, out_features=1, eps=1e-07, nalu_two_nac=False, nalu_bias=False\n      (nac_add): NACLayer(in_features=2, out_features=1)\n    )\n  )\n)\n\n\n============================================================\n\ud83d\udcca BINNED MSE ANALYSIS SETUP\n============================================================\n\ud83d\udcc8 Input tensor shape: torch.Size([10000, 2])\n\ud83d\udd22 Number of bins: 5\n\ud83d\udccf min|x| range: [0.000481, 1.957353]\n\n\ud83d\udccb Bin boundaries (quantile-based):\n   Bin 0: min|x| \u2264 0.246232\n   Bin 1: 0.246232 < min|x| \u2264 0.475309\n   Bin 2: 0.475309 < min|x| \u2264 0.749772\n   Bin 3: 0.749772 < min|x| \u2264 1.103968\n   Bin 4: min|x| > 1.103968\n\n\ud83c\udfaf Sample distribution per bin:\n   Bin 0: 2000 samples\n   Bin 1: 2000 samples\n   Bin 2: 2000 samples\n   Bin 3: 2000 samples\n   Bin 4: 2000 samples\n============================================================\ntrain 0: 6.4117722511, inter: 7.3829908371, extra: 7.9715032578\ntrain 1000: 3.6196589470, inter: 7.2065343857, extra: 7.7425055504\ntrain 2000: 4.6975440979, inter: 7.0316491127, extra: 7.4919877052\ntrain 3000: 4.5311183929, inter: 6.8641734123, extra: 7.2185640335\ntrain 4000: 7.0707054138, inter: 6.6987986565, extra: 6.8945116997\ntrain 5000: 7.5455007553, inter: 6.5425434113, extra: 6.5052647591\ntrain 6000: 5.3086185455, inter: 6.3947958946, extra: 6.0195474625\ntrain 7000: 7.2161445618, inter: 6.2583417892, extra: 5.4054145813\ntrain 8000: 6.0844354630, inter: 6.1309390068, extra: 4.6677255630\ntrain 9000: 4.2890796661, inter: 6.0150518417, extra: 3.8847656250\ntrain 10000: 4.9921588898, inter: 5.9108362198, extra: 3.2165303230\nfinished:\n  - loss_train_capped: 4.992120742797852\n  - loss_train (+reg loss): 5.004388809204102\n  - loss_train_criterion: 4.992158889770508\n  - loss_valid_inter: 5.910736083984375\n  - loss_valid_extra: 3.2158403396606445\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_10\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/y070z0ui\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_203008-y070z0ui/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_203008-y070z0ui\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_10\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/y070z0ui\n"
+    },
+    {
+      "experiment_id": 5,
+      "config": {
+        "layer_type": "DAG",
+        "learning_rate": 1e-05,
+        "clip_grad_norm": 0.01,
+        "batch_size": 128,
+        "max_target_magnitude": 10.0,
+        "num_subsets": 2,
+        "div_regularizer": 0.001,
+        "seed": 123
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 470.7612760066986,
+      "final_losses": {
+        "train": 5.8518452644,
+        "interpolation": 4.9370102882,
+        "extrapolation": 1.4504537582,
+        "best_interpolation": 4.9370102882
+      },
+      "best_interpolation_loss": 4.9370102882,
+      "stdout": "t=1.01763\nG (soft training): [0.51355, 0.51121, 0.5135]\n    Step 0:\n        selectors: [0.00879, -0.01207, -0.0, -0.0, 0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 1:\n        selectors: [-0.00151, -0.02724, 0.03232, 0.0, 0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 2:\n        selectors: [0.00131, -0.01503, 0.03841, -0.02421, -0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\nOutput Selector (soft training):\n\tlogits (soft training): [0.07385, -0.038, -0.05031]\n\tselected_node: 0\n\tintermediate_values (soft training): [0.48774, 0.50065, 0.49204]\n\tselected_value (soft training): 0.48774\ntrain 10000: 5.8518452644, inter: 4.9370102882, extra: 1.4504537582\nSample statistics (HARDENED eval state):\ninput=[-3.86695, -4.7358]\noutput=0.0, target=0.81654\nG (hardened eval): [1.0, 1.0, 1.0]\n    Step 0:\n        selectors: [0.0, 0.0, 0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 1.0 \u2192 computed_value: 0.0\n    Step 1:\n        selectors: [0.0, 0.0, -0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 1.0 \u2192 computed_value: 0.0\n    Step 2:\n        selectors: [0.0, 0.0, -0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 1.0 \u2192 computed_value: 0.0\nOutput Selector (hardened eval):\n\tlogits (hardened eval): [-0.05035, 0.06806, 0.00771]\n\tselected_node: 1\n\tintermediate_values (hardened eval): [0.0, 0.0, 0.0]\n\tselected_value (hardened eval): 0.0\nSample statistics (SOFT training state):\ninput=[0.70747, -0.81706]\noutput=-0.00666, target=-0.86587\nG (soft training): [0.50273, 0.50391, 0.50088]\n    Step 0:\n        selectors: [0.01143, 0.02972, 0.0, 0.0, -0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 1:\n        selectors: [0.01583, 0.05306, -0.01872, -0.0, -0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 2:\n        selectors: [0.02027, 0.03589, -0.02415, 0.04764, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\nOutput Selector (soft training):\n\tlogits (soft training): [-0.05035, 0.06806, 0.00771]\n\tselected_node: 1\n\tintermediate_values (soft training): [-0.0038, -0.00861, -0.00728]\n\tselected_value (soft training): -0.00861\nfinished:\n  - loss_train_capped: 6.2200469970703125\n  - loss_train (+reg loss): 5.8518452644348145\n  - loss_train_criterion: 5.8518452644348145\n  - loss_valid_inter: 4.937009334564209\n  - loss_valid_extra: 1.450453758239746\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_5\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/hnyo1bb7\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202326-hnyo1bb7/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_202326-hnyo1bb7\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_5\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/hnyo1bb7\nwandb: WARNING Tried to log to step 10000 that is less than the current step 10001. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.\n"
+    },
+    {
+      "experiment_id": 12,
+      "config": {
+        "layer_type": "DAG",
+        "learning_rate": 5e-06,
+        "clip_grad_norm": 0.005,
+        "batch_size": 64,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 789
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.320208787918091,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 10000\n  - batch_size: 64\n  - seed: 789\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_12\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/s13k04ju\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_203117-s13k04ju/logs\u001b[0m\n",
+      "stderr": "k04ju\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 11,
+      "config": {
+        "layer_type": "NALU",
+        "learning_rate": 5e-05,
+        "clip_grad_norm": 0.01,
+        "batch_size": 64,
+        "max_target_magnitude": 5.0,
+        "div_regularizer": 0.1,
+        "regualizer": 50.0,
+        "regualizer_z": 10.0,
+        "regualizer_oob": 10.0,
+        "seed": 456
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 68.17051100730896,
+      "final_losses": {
+        "train": 3.3739156723,
+        "interpolation": 3.4235870838,
+        "extrapolation": 6.3944654465,
+        "best_interpolation": 3.4235870838
+      },
+      "best_interpolation_loss": 3.4235870838,
+      "stdout": "ame_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.01\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n  - dataset: sum(v[0:1]) / sum(v[1:2])\nSingleLayerNetwork(\n  unit_name=NALU, input_size=2\n  (layer_1): GeneralizedLayer(\n    in_features=2, out_features=1, unit_name=NALU\n    (layer): NALULayer(\n      in_features=2, out_features=1, eps=1e-07, nalu_two_nac=False, nalu_bias=False\n      (nac_add): NACLayer(in_features=2, out_features=1)\n    )\n  )\n)\n\n\n============================================================\n\ud83d\udcca BINNED MSE ANALYSIS SETUP\n============================================================\n\ud83d\udcc8 Input tensor shape: torch.Size([10000, 2])\n\ud83d\udd22 Number of bins: 5\n\ud83d\udccf min|x| range: [0.000481, 1.966961]\n\n\ud83d\udccb Bin boundaries (quantile-based):\n   Bin 0: min|x| \u2264 0.280090\n   Bin 1: 0.280090 < min|x| \u2264 0.515807\n   Bin 2: 0.515807 < min|x| \u2264 0.779945\n   Bin 3: 0.779945 < min|x| \u2264 1.129887\n   Bin 4: min|x| > 1.129887\n\n\ud83c\udfaf Sample distribution per bin:\n   Bin 0: 2000 samples\n   Bin 1: 2000 samples\n   Bin 2: 2000 samples\n   Bin 3: 2000 samples\n   Bin 4: 2000 samples\n============================================================\ntrain 0: 4.5933976173, inter: 3.9307723045, extra: 7.9715032578\ntrain 1000: 3.5288679600, inter: 3.8808882236, extra: 7.8553857803\ntrain 2000: 3.4599246979, inter: 3.8306031227, extra: 7.7357969284\ntrain 3000: 2.6044368744, inter: 3.7805819511, extra: 7.6124405861\ntrain 4000: 8.5990257263, inter: 3.7297160625, extra: 7.4819264412\ntrain 5000: 2.5598125458, inter: 3.6785891056, extra: 7.3434681892\ntrain 6000: 3.3264009953, inter: 3.6272723675, extra: 7.1928467751\ntrain 7000: 3.4445900917, inter: 3.5761547089, extra: 7.0283360481\ntrain 8000: 3.1044578552, inter: 3.5248630047, extra: 6.8433227539\ntrain 9000: 2.8433010578, inter: 3.4740457535, extra: 6.6346888542\ntrain 10000: 3.3739156723, inter: 3.4235870838, extra: 6.3944654465\nfinished:\n  - loss_train_capped: 3.3738903999328613\n  - loss_train (+reg loss): 3.581383466720581\n  - loss_train_criterion: 3.373915672302246\n  - loss_valid_inter: 3.423537492752075\n  - loss_valid_extra: 6.394220352172852\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_11\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/1ct6gv7l\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_203116-1ct6gv7l/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_203116-1ct6gv7l\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_11\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/1ct6gv7l\n"
+    },
+    {
+      "experiment_id": 14,
+      "config": {
+        "layer_type": "NALU",
+        "learning_rate": 0.0001,
+        "clip_grad_norm": 0.1,
+        "batch_size": 128,
+        "max_target_magnitude": 10.0,
+        "div_regularizer": 0.01,
+        "regualizer": 10.0,
+        "regualizer_z": 1.0,
+        "regualizer_oob": 1.0,
+        "seed": 789
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 68.12425684928894,
+      "final_losses": {
+        "train": 7.5228433609,
+        "interpolation": 6.7115430832,
+        "extrapolation": 11.0754795074,
+        "best_interpolation": 6.7115430832
+      },
+      "best_interpolation_loss": 6.7115430832,
+      "stdout": ": simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.1\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n  - dataset: sum(v[0:1]) / sum(v[1:2])\nSingleLayerNetwork(\n  unit_name=NALU, input_size=2\n  (layer_1): GeneralizedLayer(\n    in_features=2, out_features=1, unit_name=NALU\n    (layer): NALULayer(\n      in_features=2, out_features=1, eps=1e-07, nalu_two_nac=False, nalu_bias=False\n      (nac_add): NACLayer(in_features=2, out_features=1)\n    )\n  )\n)\n\n\n============================================================\n\ud83d\udcca BINNED MSE ANALYSIS SETUP\n============================================================\n\ud83d\udcc8 Input tensor shape: torch.Size([10000, 2])\n\ud83d\udd22 Number of bins: 5\n\ud83d\udccf min|x| range: [0.000481, 1.957353]\n\n\ud83d\udccb Bin boundaries (quantile-based):\n   Bin 0: min|x| \u2264 0.246232\n   Bin 1: 0.246232 < min|x| \u2264 0.475309\n   Bin 2: 0.475309 < min|x| \u2264 0.749772\n   Bin 3: 0.749772 < min|x| \u2264 1.103968\n   Bin 4: min|x| > 1.103968\n\n\ud83c\udfaf Sample distribution per bin:\n   Bin 0: 2000 samples\n   Bin 1: 2000 samples\n   Bin 2: 2000 samples\n   Bin 3: 2000 samples\n   Bin 4: 2000 samples\n============================================================\ntrain 0: 6.3997168541, inter: 7.5539422035, extra: 18.1491527557\ntrain 1000: 5.4006485939, inter: 7.4436125755, extra: 16.6734161377\ntrain 2000: 7.0674300194, inter: 7.3369836807, extra: 15.0276203156\ntrain 3000: 8.8481025696, inter: 7.2387571335, extra: 13.4705028534\ntrain 4000: 4.6792240143, inter: 7.1478195190, extra: 12.1802864075\ntrain 5000: 6.6189618111, inter: 7.0632662773, extra: 11.2698307037\ntrain 6000: 6.8919811249, inter: 6.9849390984, extra: 10.7822723389\ntrain 7000: 11.6882953644, inter: 6.9119505882, extra: 10.6292333603\ntrain 8000: 6.3987488747, inter: 6.8433866501, extra: 10.6898450851\ntrain 9000: 5.1528463364, inter: 6.7755603790, extra: 10.8611392975\ntrain 10000: 7.5228433609, inter: 6.7115430832, extra: 11.0754795074\nfinished:\n  - loss_train_capped: 7.522730350494385\n  - loss_train (+reg loss): 7.523998260498047\n  - loss_train_criterion: 7.522843360900879\n  - loss_valid_inter: 6.71147346496582\n  - loss_valid_extra: 11.075474739074707\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_14\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/88rwciq8\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_203224-88rwciq8/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_203224-88rwciq8\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_14\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/88rwciq8\n"
+    },
+    {
+      "experiment_id": 9,
+      "config": {
+        "layer_type": "DAG",
+        "learning_rate": 1e-05,
+        "clip_grad_norm": 0.01,
+        "batch_size": 128,
+        "max_target_magnitude": 10.0,
+        "num_subsets": 2,
+        "div_regularizer": 0.001,
+        "seed": 456
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 474.57010102272034,
+      "final_losses": {
+        "train": 4.4866704941,
+        "interpolation": 4.9370102882,
+        "extrapolation": 1.4504537582,
+        "best_interpolation": 4.9370102882
+      },
+      "best_interpolation_loss": 4.9370102882,
+      "stdout": "t=0.17361\nG (soft training): [0.50623, 0.49553, 0.51342]\n    Step 0:\n        selectors: [0.00783, 0.02067, 0.0, 0.0, 0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 1:\n        selectors: [0.00436, -0.00407, -0.00218, -0.0, -0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 1.0\n    Step 2:\n        selectors: [-0.00067, 0.01479, -0.0176, -0.02058, -0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 1.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\nOutput Selector (soft training):\n\tlogits (soft training): [0.14594, -0.03422, 0.04961]\n\tselected_node: 0\n\tintermediate_values (soft training): [-0.00713, 0.47516, -0.01379]\n\tselected_value (soft training): -0.00713\ntrain 10000: 4.4866704941, inter: 4.9370102882, extra: 1.4504537582\nSample statistics (HARDENED eval state):\ninput=[-3.86695, -4.7358]\noutput=0.0, target=0.81654\nG (hardened eval): [1.0, 0.0, 1.0]\n    Step 0:\n        selectors: [0.0, 0.0, 0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 1.0 \u2192 computed_value: 0.0\n    Step 1:\n        selectors: [0.0, -0.0, -0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.0 \u2192 computed_value: 1.0\n    Step 2:\n        selectors: [0.0, 0.0, -0.0, -0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 1.0, 0.0]\n        G: 1.0 \u2192 computed_value: 0.0\nOutput Selector (hardened eval):\n\tlogits (hardened eval): [0.15569, -0.04406, 0.05887]\n\tselected_node: 0\n\tintermediate_values (hardened eval): [0.0, 1.0, 0.0]\n\tselected_value (hardened eval): 0.0\nSample statistics (SOFT training state):\ninput=[0.98457, -1.78039]\noutput=0.14441, target=-0.55301\nG (soft training): [0.50782, 0.49691, 0.51442]\n    Step 0:\n        selectors: [0.00791, 0.02091, 0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 1:\n        selectors: [0.00352, -0.00321, -0.00115, -0.0, -0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 1.0\n    Step 2:\n        selectors: [5e-05, 0.01502, -0.01726, -0.02169, -0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 1.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\nOutput Selector (soft training):\n\tlogits (soft training): [0.15569, -0.04406, 0.05887]\n\tselected_node: 0\n\tintermediate_values (soft training): [-0.00822, 0.50709, -0.01466]\n\tselected_value (soft training): -0.00822\nfinished:\n  - loss_train_capped: 4.788320064544678\n  - loss_train (+reg loss): 4.48667049407959\n  - loss_train_criterion: 4.48667049407959\n  - loss_valid_inter: 4.937009334564209\n  - loss_valid_extra: 1.450453758239746\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_9\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/3ucaelrs\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202548-3ucaelrs/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_202548-3ucaelrs\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_9\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/3ucaelrs\n"
+    },
+    {
+      "experiment_id": 13,
+      "config": {
+        "layer_type": "DAG",
+        "learning_rate": 1e-05,
+        "clip_grad_norm": 0.01,
+        "batch_size": 128,
+        "max_target_magnitude": 10.0,
+        "num_subsets": 2,
+        "div_regularizer": 0.001,
+        "seed": 789
+      },
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 450.4007799625397,
+      "final_losses": {
+        "train": 4.7457036972,
+        "interpolation": 4.9370102882,
+        "extrapolation": 1.4504537582,
+        "best_interpolation": 4.9370102882
+      },
+      "best_interpolation_loss": 4.9370102882,
+      "stdout": "49606, target=1.14725\nG (soft training): [0.5115, 0.51439, 0.50863]\n    Step 0:\n        selectors: [0.00227, 0.00598, -0.0, 0.0, -0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 1:\n        selectors: [0.00743, 0.03375, -0.0221, 0.0, -0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 2:\n        selectors: [0.00543, -0.0047, 0.00239, -0.00802, 0.0]\n        inputs:    [-3.78475, -4.28021, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\nOutput Selector (soft training):\n\tlogits (soft training): [0.0872, 0.0831, -0.07036]\n\tselected_node: 0\n\tintermediate_values (soft training): [0.4917, 0.50328, 0.49275]\n\tselected_value (soft training): 0.4917\ntrain 10000: 4.7457036972, inter: 4.9370102882, extra: 1.4504537582\nSample statistics (HARDENED eval state):\ninput=[-3.86695, -4.7358]\noutput=0.0, target=0.81654\nG (hardened eval): [1.0, 1.0, 1.0]\n    Step 0:\n        selectors: [0.0, 0.0, 0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 1.0 \u2192 computed_value: 0.0\n    Step 1:\n        selectors: [0.0, 0.0, -0.0, 0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 1.0 \u2192 computed_value: 0.0\n    Step 2:\n        selectors: [0.0, -0.0, 0.0, -0.0, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 1.0 \u2192 computed_value: 0.0\nOutput Selector (hardened eval):\n\tlogits (hardened eval): [0.09466, 0.09112, -0.07817]\n\tselected_node: 0\n\tintermediate_values (hardened eval): [0.0, 0.0, 0.0]\n\tselected_value (hardened eval): 0.0\nSample statistics (SOFT training state):\ninput=[-0.88953, -1.91809]\noutput=0.13483, target=0.46376\nG (soft training): [0.51283, 0.51582, 0.50922]\n    Step 0:\n        selectors: [0.0024, 0.00634, -0.0, 0.0, -0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 1:\n        selectors: [0.00761, 0.03527, -0.02326, 0.0, -0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\n    Step 2:\n        selectors: [0.00376, -0.00272, 0.0024, -0.00666, 0.0]\n        inputs:    [-3.86695, -4.7358, 0.0, 0.0, 0.0]\n        G: 0.5 \u2192 computed_value: 0.0\nOutput Selector (soft training):\n\tlogits (soft training): [0.09466, 0.09112, -0.07817]\n\tselected_node: 0\n\tintermediate_values (soft training): [-0.01259, -0.01882, 0.49207]\n\tselected_value (soft training): -0.01259\nfinished:\n  - loss_train_capped: 4.999933242797852\n  - loss_train (+reg loss): 4.74570369720459\n  - loss_train_criterion: 4.74570369720459\n  - loss_valid_inter: 4.937009334564209\n  - loss_valid_extra: 1.450453758239746\n\nModel (/checkpoint)  trained for 10000 epochs has been saved\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - final_search_13\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/eamn1r9c\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_203124-eamn1r9c/logs\u001b[0m\n",
+      "stderr": "wandb: Currently logged in as: paul-michael-curry (paul-michael-curry-paul-curry-productions) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin\nwandb: Tracking run with wandb version 0.21.1\nwandb: Run data is saved locally in /Users/paul_curry/ai2/nalm-benchmark/wandb/run-20250822_203124-eamn1r9c\nwandb: Run `wandb offline` to turn off syncing.\nwandb: Syncing run local - div - final_search_13\nwandb: \u2b50\ufe0f View project at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark\nwandb: \ud83d\ude80 View run at https://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/eamn1r9c\n"
+    }
+  ],
+  "grokked_configs": [],
+  "excellent_configs": [],
+  "good_configs": []
+}

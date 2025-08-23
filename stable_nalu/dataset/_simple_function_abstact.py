@@ -287,18 +287,31 @@ class SimpleFunctionDatasetFork(torch.utils.data.Dataset):
         if self._max_result_magnitude is not None:
             max_target = self._max_result_magnitude
 
-        # Keep resampling until we get reasonable targets
-        max_attempts = 100
+        # Keep resampling individual bad samples until we get reasonable targets
+        max_attempts = 1000
         attempt = 0
-        while np.any(np.abs(output_scalar) > max_target) and attempt < max_attempts:
+        while attempt < max_attempts:
+            # Find which samples exceed the limit
+            bad_mask = np.abs(output_scalar.flatten()) > max_target
+            if not np.any(bad_mask):
+                break  # All samples are good
+
             attempt += 1
-            # Resample input
-            input_vector = self._multi_sample(batch_size)
-            subsets = [
-                np.sum(input_vector[..., start:end], axis=sum_axies)
-                for start, end in self._subset_ranges
-            ]
-            output_scalar = self._operation(*subsets)[:, np.newaxis]
+            # Only resample the bad samples
+            bad_indices = np.where(bad_mask)[0]
+            bad_count = len(bad_indices)
+
+            # Resample input for bad samples only
+            new_input = self._multi_sample(bad_count)
+            input_vector[bad_indices] = new_input
+
+            # Recompute subsets and output for bad samples only
+            for i, idx in enumerate(bad_indices):
+                subsets = [
+                    np.sum(input_vector[idx : idx + 1, ..., start:end], axis=sum_axies)
+                    for start, end in self._subset_ranges
+                ]
+                output_scalar[idx] = self._operation(*subsets)[:, np.newaxis]
 
         # If select is an index, just return the content of one row
         if not isinstance(select, slice):

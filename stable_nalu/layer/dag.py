@@ -77,6 +77,8 @@ class DAGLayer(ExtendedTorchModule):
         enable_taps: bool = True,
         _do_not_predict_weights: bool = False,
         use_dense_features: bool = False,
+        div_regularizer_eps: float = 0.01,
+        use_complex_sign: bool = True,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -108,6 +110,8 @@ class DAGLayer(ExtendedTorchModule):
         self.enable_taps = bool(enable_taps)
         self._do_not_predict_weights = bool(_do_not_predict_weights)
         self.use_dense_features = bool(use_dense_features)
+        self.div_regularizer_eps = div_regularizer_eps
+        self.use_complex_sign = bool(use_complex_sign)
 
         # Calculate input size for heads based on dense features
         if self.use_dense_features:
@@ -428,12 +432,10 @@ class DAGLayer(ExtendedTorchModule):
         l_log = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
         delta = l_lin - l_log
         delta = tap(delta, "delta", self.enable_taps)
-        # delta = torch.tanh(delta)
-        # delta = tap(delta, "delta_clamped", self.enable_taps)
         m_log = l_log + G_step * delta
         m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
+        # This should be clamped to not be too large
         V_mag = torch.exp(m_log)
-        V_mag = torch.clamp(V_mag, min=self._mag_min, max=self._mag_max)
         return V_mag
 
     def _is_nan(
@@ -549,10 +551,23 @@ class DAGLayer(ExtendedTorchModule):
                 # For simple mixing, use R_mixed for both sign and magnitude computation
                 # Simple sign computation with sharp tanh
                 linear_sign = torch.tanh(R_mixed / 1e-4)
-                sign_weights = (working_sign * torch.abs(O_step)) * 2.0 + 1.0
-                log_sign = torch.tanh(
-                    torch.prod(sign_weights, dim=-1, keepdim=True) / 1e-4
-                )
+
+                if self.use_complex_sign:
+                    # Use complex sign computation with cos trick from the original domain mixing
+                    w = torch.abs(O_step)
+                    neg_frac = 0.5 * (
+                        1.0 - working_sign
+                    )  # 1 for −1, 0 for +1, fractional if soft
+                    m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+                    # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
+                    log_sign = torch.cos(math.pi * m)
+                else:
+                    # Original simple sign computation
+                    sign_weights = (working_sign * torch.abs(O_step)) * 2.0 + 1.0
+                    log_sign = torch.tanh(
+                        torch.prod(sign_weights, dim=-1, keepdim=True) / 1e-4
+                    )
+
                 V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
 
                 # Simple magnitude computation

@@ -1,0 +1,579 @@
+{
+  "problem_setup": {
+    "interpolation_range": "[-2.0,2.0]",
+    "extrapolation_range": "[[-6.0,-2.0],[2.0,6.0]]",
+    "note": "EXTREME hyperparameter search - nuclear option"
+  },
+  "search_space": {
+    "learning_rate": [
+      1e-07,
+      5e-07,
+      1e-06,
+      2e-06
+    ],
+    "clip_grad_norm": [
+      0.0001,
+      0.0005,
+      0.001
+    ],
+    "batch_size": [
+      16,
+      32,
+      64
+    ],
+    "max_target_magnitude": [
+      1.0,
+      2.0,
+      5.0
+    ],
+    "seed": [
+      1,
+      7,
+      42,
+      99,
+      123,
+      234,
+      345,
+      456,
+      567,
+      678,
+      789,
+      890,
+      1001,
+      1123,
+      1234,
+      2024,
+      3141,
+      5678,
+      7890,
+      9999
+    ],
+    "num_subsets": [
+      1
+    ],
+    "div_regularizer": [
+      0.1,
+      0.5,
+      1.0
+    ]
+  },
+  "nuclear_configs": [
+    {
+      "learning_rate": 1e-07,
+      "clip_grad_norm": 0.0001,
+      "batch_size": 16,
+      "max_target_magnitude": 1.0,
+      "num_subsets": 1,
+      "div_regularizer": 1.0
+    },
+    {
+      "learning_rate": 5e-07,
+      "clip_grad_norm": 0.0005,
+      "batch_size": 32,
+      "max_target_magnitude": 2.0,
+      "num_subsets": 1,
+      "div_regularizer": 0.5
+    },
+    {
+      "learning_rate": 1e-06,
+      "clip_grad_norm": 0.001,
+      "batch_size": 64,
+      "max_target_magnitude": 5.0,
+      "num_subsets": 1,
+      "div_regularizer": 0.1
+    }
+  ],
+  "results": [
+    {
+      "experiment_id": 3,
+      "config": {
+        "learning_rate": 1e-07,
+        "clip_grad_norm": 0.0001,
+        "batch_size": 16,
+        "max_target_magnitude": 1.0,
+        "num_subsets": 1,
+        "div_regularizer": 1.0,
+        "seed": 7
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 9.00502896308899,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 16\n  - seed: 7\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_3\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/pgy48uxp\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202003-pgy48uxp/logs\u001b[0m\n",
+      "stderr": "48uxp\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 0,
+      "config": {
+        "learning_rate": 1e-07,
+        "clip_grad_norm": 0.0001,
+        "batch_size": 16,
+        "max_target_magnitude": 1.0,
+        "num_subsets": 1,
+        "div_regularizer": 1.0,
+        "seed": 1
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 9.031692028045654,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 16\n  - seed: 1\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_0\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/ub7dq5rs\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202003-ub7dq5rs/logs\u001b[0m\n",
+      "stderr": "dq5rs\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 2,
+      "config": {
+        "learning_rate": 1e-06,
+        "clip_grad_norm": 0.001,
+        "batch_size": 64,
+        "max_target_magnitude": 5.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 1
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 9.391535758972168,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 64\n  - seed: 1\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_2\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/0htcwwox\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202003-0htcwwox/logs\u001b[0m\n",
+      "stderr": "cwwox\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 1,
+      "config": {
+        "learning_rate": 5e-07,
+        "clip_grad_norm": 0.0005,
+        "batch_size": 32,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.5,
+        "seed": 1
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 9.402962923049927,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 32\n  - seed: 1\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_1\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/8j0xf80e\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202003-8j0xf80e/logs\u001b[0m\n",
+      "stderr": "xf80e\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 6,
+      "config": {
+        "learning_rate": 1e-07,
+        "clip_grad_norm": 0.0001,
+        "batch_size": 16,
+        "max_target_magnitude": 1.0,
+        "num_subsets": 1,
+        "div_regularizer": 1.0,
+        "seed": 42
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.619694948196411,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 16\n  - seed: 42\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_6\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/bfdgn6yl\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202011-bfdgn6yl/logs\u001b[0m\n",
+      "stderr": "gn6yl\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 5,
+      "config": {
+        "learning_rate": 1e-06,
+        "clip_grad_norm": 0.001,
+        "batch_size": 64,
+        "max_target_magnitude": 5.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 7
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 8.003563165664673,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 64\n  - seed: 7\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_5\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/uurzh5up\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202011-uurzh5up/logs\u001b[0m\n",
+      "stderr": "zh5up\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 4,
+      "config": {
+        "learning_rate": 5e-07,
+        "clip_grad_norm": 0.0005,
+        "batch_size": 32,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.5,
+        "seed": 7
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 8.030372858047485,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 32\n  - seed: 7\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_4\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/z0rqpawl\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202011-z0rqpawl/logs\u001b[0m\n",
+      "stderr": "qpawl\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 7,
+      "config": {
+        "learning_rate": 5e-07,
+        "clip_grad_norm": 0.0005,
+        "batch_size": 32,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.5,
+        "seed": 42
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.6749489307403564,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 32\n  - seed: 42\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_7\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/dqalhd4l\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202011-dqalhd4l/logs\u001b[0m\n",
+      "stderr": "lhd4l\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 11,
+      "config": {
+        "learning_rate": 1e-06,
+        "clip_grad_norm": 0.001,
+        "batch_size": 64,
+        "max_target_magnitude": 5.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 99
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.809291124343872,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 64\n  - seed: 99\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_11\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/cmjf4jzc\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202019-cmjf4jzc/logs\u001b[0m\n",
+      "stderr": "f4jzc\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 8,
+      "config": {
+        "learning_rate": 1e-06,
+        "clip_grad_norm": 0.001,
+        "batch_size": 64,
+        "max_target_magnitude": 5.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 42
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.905209064483643,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 64\n  - seed: 42\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_8\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/0pm43uoy\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202019-0pm43uoy/logs\u001b[0m\n",
+      "stderr": "43uoy\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 10,
+      "config": {
+        "learning_rate": 5e-07,
+        "clip_grad_norm": 0.0005,
+        "batch_size": 32,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.5,
+        "seed": 99
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.897674798965454,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 32\n  - seed: 99\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_10\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/wsvz1vs8\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202019-wsvz1vs8/logs\u001b[0m\n",
+      "stderr": "z1vs8\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 9,
+      "config": {
+        "learning_rate": 1e-07,
+        "clip_grad_norm": 0.0001,
+        "batch_size": 16,
+        "max_target_magnitude": 1.0,
+        "num_subsets": 1,
+        "div_regularizer": 1.0,
+        "seed": 99
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.992830276489258,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 16\n  - seed: 99\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_9\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/ksmtntnh\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202019-ksmtntnh/logs\u001b[0m\n",
+      "stderr": "tntnh\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 14,
+      "config": {
+        "learning_rate": 1e-06,
+        "clip_grad_norm": 0.001,
+        "batch_size": 64,
+        "max_target_magnitude": 5.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 123
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.770891904830933,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 64\n  - seed: 123\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_14\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/e4fp3095\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202027-e4fp3095/logs\u001b[0m\n",
+      "stderr": "p3095\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 13,
+      "config": {
+        "learning_rate": 5e-07,
+        "clip_grad_norm": 0.0005,
+        "batch_size": 32,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.5,
+        "seed": 123
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.809361934661865,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 32\n  - seed: 123\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_13\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/0smylsaa\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202027-0smylsaa/logs\u001b[0m\n",
+      "stderr": "ylsaa\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 12,
+      "config": {
+        "learning_rate": 1e-07,
+        "clip_grad_norm": 0.0001,
+        "batch_size": 16,
+        "max_target_magnitude": 1.0,
+        "num_subsets": 1,
+        "div_regularizer": 1.0,
+        "seed": 123
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 8.07946491241455,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 16\n  - seed: 123\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_12\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/10mjs9ub\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202027-10mjs9ub/logs\u001b[0m\n",
+      "stderr": "js9ub\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 15,
+      "config": {
+        "learning_rate": 1e-07,
+        "clip_grad_norm": 0.0001,
+        "batch_size": 16,
+        "max_target_magnitude": 1.0,
+        "num_subsets": 1,
+        "div_regularizer": 1.0,
+        "seed": 234
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.952497959136963,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 16\n  - seed: 234\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_15\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/zkxoxt2n\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202027-zkxoxt2n/logs\u001b[0m\n",
+      "stderr": "oxt2n\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 17,
+      "config": {
+        "learning_rate": 1e-06,
+        "clip_grad_norm": 0.001,
+        "batch_size": 64,
+        "max_target_magnitude": 5.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.1,
+        "seed": 234
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.817562818527222,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 64\n  - seed: 234\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-06\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_17\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/saqozf8n\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202035-saqozf8n/logs\u001b[0m\n",
+      "stderr": "ozf8n\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 16,
+      "config": {
+        "learning_rate": 5e-07,
+        "clip_grad_norm": 0.0005,
+        "batch_size": 32,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.5,
+        "seed": 234
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.818208932876587,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 32\n  - seed: 234\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_16\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/t0n1b2j6\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202035-t0n1b2j6/logs\u001b[0m\n",
+      "stderr": "1b2j6\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 19,
+      "config": {
+        "learning_rate": 5e-07,
+        "clip_grad_norm": 0.0005,
+        "batch_size": 32,
+        "max_target_magnitude": 2.0,
+        "num_subsets": 1,
+        "div_regularizer": 0.5,
+        "seed": 345
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.592743158340454,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 32\n  - seed: 345\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 5e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0005\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_19\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/22on3onj\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202035-22on3onj/logs\u001b[0m\n",
+      "stderr": "n3onj\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    },
+    {
+      "experiment_id": 18,
+      "config": {
+        "learning_rate": 1e-07,
+        "clip_grad_norm": 0.0001,
+        "batch_size": 16,
+        "max_target_magnitude": 1.0,
+        "num_subsets": 1,
+        "div_regularizer": 1.0,
+        "seed": 345
+      },
+      "success": false,
+      "grokked": false,
+      "early_stopped": false,
+      "duration": 7.6141510009765625,
+      "final_losses": {
+        "train": Infinity,
+        "interpolation": Infinity,
+        "extrapolation": Infinity
+      },
+      "best_interpolation_loss": Infinity,
+      "stdout": "running\n  - layer_type: -1\n  - layer_type: DAG\n  - first_layer: None\n  - operation: div\n  - num_subsets: 1\n  - regualizer: 10\n  - regualizer_z: 0\n  - regualizer_oob: 1\n  -\n  - max_iterations: 7500\n  - batch_size: 16\n  - seed: 345\n  -\n  - interpolation_range: [-2.0, 2.0]\n  - extrapolation_range: [[-6.0, -2.0], [2.0, 6.0]]\n  - input_size: 2\n  - output_size: 1\n  - subset_ratio: 0.5\n  - overlap_ratio: 0.0\n  - simple: False\n  -\n  - hidden_size: 2\n  - nac_mul: none\n  - oob_mode: clip\n  - regualizer_scaling: linear\n  - regualizer_scaling_start: 1000000\n  - regualizer_scaling_end: 2000000\n  - regualizer_shape: linear\n  - mnac_epsilon: 0\n  - nalu_bias: False\n  - nalu_two_nac: False\n  - nalu_two_gate: False\n  - nalu_mul: normal\n  - nalu_gate: normal\n  - nac_weight: normal\n  -\n  - optimizer: adam\n  - learning_rate: 1e-07\n  - momentum: 0.0\n  -\n  - cuda: False\n  - name_prefix: simple_function_static\n  - remove_existing_data: False\n  - verbose: False\n  -\n  - reg_scale_type: heim\n  - regualizer_beta_start: 1e-05\n  - regualizer_beta_end: 0.0001\n  - regualizer_beta_step: 10000\n  - regualizer_beta_growth: 10\n  - regualizer_l1: False\n  - regualizer-npu-w: 0\n  - regualizer-gate: 0\n  - npu-clip: none\n  - npu-Wr-init: xavier-uniform\n  -\n  - pytorch-precision: torch.float32\n  -\n  - no-save: False\n  - load-checkpoint: False\n  - log-interval: 1000\n  -\n  - clip-grad-norm: 0.0001\n  - nru_div_mode: div\n  - realnpu_reg_type: W\n  -\n  - reinit: False\n  - reinit_epoch_interval: 10\n  - reinit_max_stored_losses: 5000\n  - reinit_loss_thr: 1.0\n  - num_bins: 5\n  -\n  -\n\u001b[1;34mwandb\u001b[0m: \n\u001b[1;34mwandb\u001b[0m: \ud83d\ude80 View run \u001b[33mlocal - div - extreme_search_18\u001b[0m at: \u001b[34mhttps://wandb.ai/paul-michael-curry-paul-curry-productions/nalm-benchmark/runs/j8zmyko0\u001b[0m\n\u001b[1;34mwandb\u001b[0m: Find logs at: \u001b[1;35mwandb/run-20250822_202035-j8zmyko0/logs\u001b[0m\n",
+      "stderr": "myko0\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\nTraceback (most recent call last):\n  File \"/Users/paul_curry/ai2/nalm-benchmark/experiments/single_layer_benchmark.py\", line 777, in <module>\n    print(f\"  - dataset: {dataset.print_operation()}\")\n  File \"/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/dataset/_simple_function_abstact.py\", line 130, in print_operation\n    return getattr(ARITHMETIC_FUNCTIONS_STRINGIY, self._operation_name)(*subset_str)\nTypeError: ARITHMETIC_FUNCTIONS_STRINGIY.div() missing 1 required positional argument: 'b'\n"
+    }
+  ],
+  "grokked_configs": [],
+  "excellent_progress_configs": [],
+  "good_progress_configs": [],
+  "summary": {
+    "total_experiments": 20,
+    "successful_experiments": 0,
+    "grokking_experiments": 0,
+    "excellent_progress_experiments": 0,
+    "good_progress_experiments": 0,
+    "grokking_rate": 0.0
+  }
+}

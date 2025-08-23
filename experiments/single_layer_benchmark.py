@@ -32,6 +32,7 @@ def print_dag_internal_state(
     state_label,
     o_sign_tensor=None,
     o_mag_tensor=None,
+    dag_layer=None,
 ):
     """Print DAG internal state. Extracts [0] from all tensors and formats output."""
 
@@ -54,26 +55,62 @@ def print_dag_internal_state(
 
     print(f"Sample statistics ({state_label} state):")
     print(f"input={[round(x, 5) for x in x_vals]}")
-    print(f"output={round(y_val, 5)}")
-    print(f"target={round(t_val, 5)}")
+    print(f"output={round(y_val, 5)}, target={round(t_val, 5)}")
     print(f"G ({state_label.lower()}): {[round(g, 5) for g in g_state]}")
-    print(f"O ({state_label.lower()}):")
+
+    # Get intermediate values at each step if DAG layer is available
+    working_values = None
+    if (
+        dag_layer is not None
+        and hasattr(dag_layer, "_debug_working_mag")
+        and hasattr(dag_layer, "_debug_working_sign")
+    ):
+        if (
+            len(dag_layer._debug_working_mag) > 0
+            and len(dag_layer._debug_working_sign) > 0
+        ):
+            # Combine mag and sign to get actual values
+            working_values = []
+            for i in range(len(dag_layer._debug_working_mag)):
+                mag = (
+                    dag_layer._debug_working_mag[i][0].detach().cpu()
+                )  # First batch element
+                sign = (
+                    dag_layer._debug_working_sign[i][0].detach().cpu()
+                )  # First batch element
+                values = (mag * sign).tolist()
+                working_values.append(values)
+
     for step_idx, step_values in enumerate(o_state):
-        rounded_values = [round(v, 5) for v in step_values]
+        rounded_selectors = [round(v, 5) for v in step_values]
         g_value = round(g_state[step_idx], 1) if step_idx < len(g_state) else "N/A"
+
+        # Get intermediate values available at this step
+        if working_values is not None and step_idx < len(working_values):
+            intermediate_vals = [round(v, 5) for v in working_values[step_idx]]
+
+            # Compute the result of this step (stored in next working_values if available)
+            computed_value = "N/A"
+            if step_idx + 1 < len(working_values):
+                # The new value is stored at position num_initial_nodes + step_idx
+                new_idx = dag_layer.num_initial_nodes + step_idx
+                if new_idx < len(working_values[step_idx + 1]):
+                    computed_value = round(working_values[step_idx + 1][new_idx], 5)
+
+            print(f"    Step {step_idx}:")
+            print(f"        selectors: {rounded_selectors}")
+            print(f"        inputs:    {intermediate_vals}")
+            print(f"        G: {g_value} → computed_value: {computed_value}")
+        else:
+            # Fallback to old format if debug data not available
+            print(f"    Step {step_idx}: selectors {rounded_selectors} G: {g_value}")
 
         # Only print separate sign/mag if they exist (not in unified selector mode)
         if o_sign_state is not None and o_mag_state is not None:
             rounded_sign = [round(o, 5) for o in o_sign_state[step_idx]]
             rounded_mag = [round(o, 5) for o in o_mag_state[step_idx]]
-            print(
-                f"    Step {step_idx}: sign ({state_label.lower()}): {rounded_sign} G: {g_value}"
-            )
-            print(
-                f"    Step {step_idx}: mag ({state_label.lower()}): {rounded_mag} G: {g_value}"
-            )
-
-        print(f"    Step {step_idx}: values {rounded_values} G: {g_value}")
+            print(f"        sign ({state_label.lower()}): {rounded_sign}")
+            print(f"        mag ({state_label.lower()}): {rounded_mag}")
 
     # Add output selector information
     if out_logits_state is not None:
@@ -601,6 +638,14 @@ parser.add_argument(
     help="Maximum allowed magnitude for target values (filters out extreme division results)",
 )
 
+parser.add_argument(
+    "--div-regularizer",
+    action="store",
+    default=None,
+    type=float,
+    help="Division regularizer epsilon for x/(x^2 + eps^2) term. If None, no division regularizer is applied.",
+)
+
 args = parser.parse_args()
 
 # Initialize wandb with note
@@ -1103,8 +1148,8 @@ for epoch_i, (x_train, t_train) in zip(
                 out_logits_tensor=dag._last_eval_out_logits,
                 value_vec_inter_tensor=dag._last_eval_value_vec_inter,
                 state_label="HARDENED eval",
+                dag_layer=dag,
             )
-            print()  # Add spacing
             # Inspect gate/selection on the first sample (concise)
             print_dag_internal_state(
                 x_tensor=x_train,
@@ -1115,6 +1160,7 @@ for epoch_i, (x_train, t_train) in zip(
                 out_logits_tensor=dag._last_train_out_logits,
                 value_vec_inter_tensor=dag._last_train_value_vec_inter,
                 state_label="SOFT training",
+                dag_layer=dag,
             )
 
     if early_stop:
