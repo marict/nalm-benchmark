@@ -4,12 +4,12 @@ import datetime
 import math
 import os
 import random
+import time
 from decimal import Decimal
 
 import numpy as np
 import runpod_service.wandb_setup as wandb
 import torch
-import time
 
 # Enable anomaly detection for debugging gradient issues
 torch.autograd.set_detect_anomaly(True, check_nan=True)
@@ -1019,7 +1019,7 @@ for epoch_i, (x_train, t_train) in zip(
     log_dict.update(binned_mse)
 
     _es_thr = 1e-10
-    PATIENCE = 3
+    PATIENCE = 100
     if interpolation_error < _es_thr:
         patience_counter += 1
         if patience_counter >= PATIENCE:

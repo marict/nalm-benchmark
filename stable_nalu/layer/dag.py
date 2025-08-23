@@ -26,12 +26,12 @@ python experiments/single_layer_benchmark.py \
     --clip-grad-norm 1.0 \
     --log-interval 100
 
-  Seed 223
+  Seed 223 with patience 100
   Results:
   - Add: Groks at 1318 steps
-  - Mul: Groks at 84 steps
-  - Sub: Groks at 84 steps
-  - Div: Groks at 423 steps
+  - Mul: Groks at 181 steps
+  - Sub: Does not grok (groks on other seeds)
+  - Div: Groks at 888 steps
 
 """
 
@@ -66,14 +66,11 @@ class DAGLayer(ExtendedTorchModule):
         name: str | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        use_simple_domain_mixing: bool = True,
-        use_explicit_eval_rounding: bool = True,
         enable_debug_logging: bool = False,
         enable_taps: bool = True,
         _do_not_predict_weights: bool = False,
         use_dense_features: bool = False,
         div_regularizer_eps: float = 0.01,
-        use_complex_sign: bool = True,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -92,14 +89,11 @@ class DAGLayer(ExtendedTorchModule):
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
-        self.use_simple_domain_mixing = bool(use_simple_domain_mixing)
-        self.use_explicit_eval_rounding = bool(use_explicit_eval_rounding)
         self.enable_debug_logging = bool(enable_debug_logging)
         self.enable_taps = bool(enable_taps)
         self._do_not_predict_weights = bool(_do_not_predict_weights)
         self.use_dense_features = bool(use_dense_features)
         self.div_regularizer_eps = div_regularizer_eps
-        self.use_complex_sign = bool(use_complex_sign)
 
         # Calculate input size for heads based on dense features
         if self.use_dense_features:
@@ -257,46 +251,12 @@ class DAGLayer(ExtendedTorchModule):
         if not self.training:
             # Only apply eval discretization if STEs are not already handling it
             G = (G > 0.5).to(G.dtype)
-
-            # Explicit eval rounding (gated behind flag)
-            if self.use_explicit_eval_rounding:
-                O = torch.round(O).clamp(-1.0, 1.0)
-            else:
-                # Original eval discretization only applies if not using unified selector
-                if not self.use_unified_selector:
-                    # Extract components for discretization
-                    O_sign_discrete = torch.where(
-                        O >= 0,
-                        torch.tensor(1.0, device=O.device),
-                        torch.tensor(-1.0, device=O.device),
-                    )
-                    O_mag_discrete = torch.abs(O)
-                    O_mag_discrete = (O_mag_discrete > 0.5).to(O.dtype)
-                    O = O_sign_discrete * O_mag_discrete
+            O = torch.round(O).clamp(-1.0, 1.0)
 
         # Output selector logits
         out_logits = self.output_selector_head(head_input).to(dtype)
 
         return O, G, out_logits
-
-    @staticmethod
-    def _ste_round(values: torch.Tensor) -> torch.Tensor:
-        return values.round().detach() + (values - values.detach())
-
-    def _compute_aggregates(
-        self,
-        working_mag: torch.Tensor,
-        working_sign: torch.Tensor,
-        O_step: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Aggregate linear/log terms."""
-        signed_values = working_sign * working_mag
-        log_mag = torch.log(torch.clamp(working_mag, min=self._mag_min))
-
-        R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)
-        R_log = torch.sum(O_step * log_mag, dim=-1, keepdim=True)
-
-        return R_lin, R_log
 
     def _compute_simple_domain_mixed_result(
         self,
@@ -311,29 +271,6 @@ class DAGLayer(ExtendedTorchModule):
         mixed = log_mag * (1.0 - G_step) + signed_values * G_step
         return torch.sum(O_step * mixed, dim=-1, keepdim=True)
 
-    def _compute_new_sign(
-        self,
-        R_lin: torch.Tensor,
-        working_sign: torch.Tensor,
-        O_step: torch.Tensor,
-        G_step: torch.Tensor,
-    ) -> torch.Tensor:
-        """Mix signs in linear and log domains with bounded outputs."""
-
-        # We extract the linear sign based on result of the operation
-        linear_sign = torch.tanh(R_lin)
-
-        # Map working_sign to angles for smooth sign
-        w = torch.abs(O_step)
-        neg_frac = 0.5 * (1.0 - working_sign)  # 1 for −1, 0 for +1, fractional if soft
-        m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
-
-        # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
-        log_sign = torch.cos(math.pi * m)
-        s = G_step * linear_sign + (1.0 - G_step) * log_sign
-
-        return s
-
     def soft_floor(self, x: torch.Tensor, min: float, t: float = 1.0) -> torch.Tensor:
         beta = 1.0 / t
         return min + torch.nn.functional.softplus(x - min, beta=beta)
@@ -346,23 +283,6 @@ class DAGLayer(ExtendedTorchModule):
         self, x: torch.Tensor, min: float, max: float, t: float = 1.0
     ) -> torch.Tensor:
         return self.soft_floor(self.soft_ceiling(x, max, t), min, t)
-
-    def _compute_new_magnitude(
-        self,
-        R_lin: torch.Tensor,
-        R_log: torch.Tensor,
-        G_step: torch.Tensor,
-    ) -> torch.Tensor:
-        """Mix magnitudes in log space with bounded gate leverage."""
-        l_lin = torch.log(torch.clamp(torch.abs(R_lin), min=self._mag_min))
-        l_log = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
-        delta = l_lin - l_log
-        delta = tap(delta, "delta", self.enable_taps)
-        m_log = l_log + G_step * delta
-        m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
-        # This should be clamped to not be too large
-        V_mag = torch.exp(m_log)
-        return V_mag
 
     def _is_nan(
         self, name: str, tensor: torch.Tensor, print_debug: bool = False
@@ -460,135 +380,101 @@ class DAGLayer(ExtendedTorchModule):
             O_step = O[:, step, :]
             G_step = G[:, step].unsqueeze(-1)
 
-            if self.use_simple_domain_mixing:
-                # Use simple domain mixing approach from working version
-                R_mixed = self._compute_simple_domain_mixed_result(
-                    working_mag, working_sign, O_step, G_step
+            # Use simple domain mixing approach from working version
+            R_mixed = self._compute_simple_domain_mixed_result(
+                working_mag, working_sign, O_step, G_step
+            )
+            R_mixed = tap(R_mixed, "R_mixed", self.enable_taps)
+
+            # Debug: save for compatibility
+            self._debug_R_lin.append(R_mixed.clone())
+            self._debug_R_log.append(R_mixed.clone())
+
+            if self._is_nan("R_mixed", R_mixed) and self.training:
+                pdb.set_trace()
+
+            # For simple mixing, use R_mixed for both sign and magnitude computation
+            # Simple sign computation with sharp tanh
+            linear_sign = torch.tanh(R_mixed / 1e-4)
+
+            # Use complex sign computation with cos trick from the original domain mixing
+            w = torch.abs(O_step)
+            neg_frac = 0.5 * (
+                1.0 - working_sign
+            )  # 1 for −1, 0 for +1, fractional if soft
+            m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+
+            # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
+            log_sign = torch.cos(math.pi * m)
+
+            V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
+
+            # Simple magnitude computation
+            linear_mag = torch.clamp(torch.abs(R_mixed), max=self._mag_max)
+            R_mixed_clamped = torch.clamp(
+                R_mixed, min=-self._log_lim, max=self._log_lim
+            )
+            log_mag_result = torch.exp(R_mixed_clamped)
+            V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
+
+            # Debug logging for troubleshooting
+            if (
+                self.enable_debug_logging and step == 0
+            ):  # Only log first step to avoid spam
+                # Compute what the ideal result should be
+                input_vals = (
+                    working_mag[0, : self.num_initial_nodes]
+                    * working_sign[0, : self.num_initial_nodes]
                 )
-                R_mixed = tap(R_mixed, "R_mixed", self.enable_taps)
+                selector_vals = O_step[0, : self.num_initial_nodes]
 
-                # Debug: save for compatibility
-                self._debug_R_lin.append(R_mixed.clone())
-                self._debug_R_log.append(R_mixed.clone())
-
-                if self._is_nan("R_mixed", R_mixed) and self.training:
-                    pdb.set_trace()
-
-                # For simple mixing, use R_mixed for both sign and magnitude computation
-                # Simple sign computation with sharp tanh
-                linear_sign = torch.tanh(R_mixed / 1e-4)
-
-                if self.use_complex_sign:
-                    # Use complex sign computation with cos trick from the original domain mixing
-                    w = torch.abs(O_step)
-                    neg_frac = 0.5 * (
-                        1.0 - working_sign
-                    )  # 1 for −1, 0 for +1, fractional if soft
-                    m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
-                    # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
-                    log_sign = torch.cos(math.pi * m)
-                else:
-                    # Original simple sign computation
-                    sign_weights = (working_sign * torch.abs(O_step)) * 2.0 + 1.0
-                    log_sign = torch.tanh(
-                        torch.prod(sign_weights, dim=-1, keepdim=True) / 1e-4
-                    )
-
-                V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
-
-                # Simple magnitude computation
-                linear_mag = torch.clamp(torch.abs(R_mixed), max=self._mag_max)
-                R_mixed_clamped = torch.clamp(
-                    R_mixed, min=-self._log_lim, max=self._log_lim
+                print(f"=== DEBUG STEP {step} ===")
+                print(f"Input values: {input_vals.detach().cpu().numpy()}")
+                print(f"Selector: {selector_vals.detach().cpu().numpy()}")
+                print(
+                    f"Expected linear result: {torch.sum(selector_vals * input_vals).item():.6f}"
                 )
-                log_mag_result = torch.exp(R_mixed_clamped)
-                V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
-
-                # Debug logging for troubleshooting
-                if (
-                    self.enable_debug_logging and step == 0
-                ):  # Only log first step to avoid spam
-                    # Compute what the ideal result should be
-                    input_vals = (
-                        working_mag[0, : self.num_initial_nodes]
-                        * working_sign[0, : self.num_initial_nodes]
+                if len(input_vals) >= 2:
+                    # For division: first_input / second_input (assuming selector is [1, -1, ...])
+                    target_pattern = torch.tensor(
+                        [1.0, -1.0],
+                        device=selector_vals.device,
+                        dtype=selector_vals.dtype,
                     )
-                    selector_vals = O_step[0, : self.num_initial_nodes]
-
-                    print(f"=== DEBUG STEP {step} ===")
-                    print(f"Input values: {input_vals.detach().cpu().numpy()}")
-                    print(f"Selector: {selector_vals.detach().cpu().numpy()}")
-                    print(
-                        f"Expected linear result: {torch.sum(selector_vals * input_vals).item():.6f}"
-                    )
-                    if len(input_vals) >= 2:
-                        # For division: first_input / second_input (assuming selector is [1, -1, ...])
-                        target_pattern = torch.tensor(
-                            [1.0, -1.0],
-                            device=selector_vals.device,
-                            dtype=selector_vals.dtype,
+                    if torch.allclose(selector_vals[:2], target_pattern):
+                        expected_div = (
+                            input_vals[0] / input_vals[1]
+                            if input_vals[1].abs() > 1e-6
+                            else float("inf")
                         )
-                        if torch.allclose(selector_vals[:2], target_pattern):
-                            expected_div = (
-                                input_vals[0] / input_vals[1]
-                                if input_vals[1].abs() > 1e-6
-                                else float("inf")
-                            )
-                            print(
-                                f"Expected division result: {expected_div.item():.6f}"
-                            )
+                        print(f"Expected division result: {expected_div.item():.6f}")
 
-                    print(
-                        f"Input magnitudes: {working_mag[0, :self.num_initial_nodes].detach().cpu().numpy()}"
-                    )
-                    print(
-                        f"Input signs: {working_sign[0, :self.num_initial_nodes].detach().cpu().numpy()}"
-                    )
-                    print(f"O_step: {O_step[0].detach().cpu().numpy()}")
-                    print(
-                        f"G_step: {G_step[0].item():.6f} ({'LINEAR' if G_step[0].item() > 0.5 else 'LOG'})"
-                    )
-                    print(f"R_mixed: {R_mixed[0].item():.6f}")
-
-                    # Check for numerical issues
-                    if torch.abs(R_mixed).max() > self._log_lim:
-                        print(f"⚠️  R_mixed out of bounds!")
-                    if torch.abs(log_mag_result).max() > self._mag_max:
-                        print(f"⚠️  log_mag_result out of bounds!")
-
-                    print(f"Sign weights: {sign_weights[0].detach().cpu().numpy()}")
-                    sign_prod = torch.prod(sign_weights[0], dim=-1)
-                    print(f"Sign product: {sign_prod.item():.6f}")
-                    if torch.abs(sign_prod) > 1e6:
-                        print(f"⚠️  Sign product exploded!")
-
-                    print(f"Linear sign: {linear_sign[0].item():.6f}")
-                    print(f"Log sign: {log_sign[0].item():.6f}")
-                    print(f"Final V_sign: {V_sign_new[0].item():.6f}")
-                    print(f"Linear mag: {linear_mag[0].item():.6f}")
-                    print(f"Log mag result: {log_mag_result[0].item():.6f}")
-                    print(f"Final V_mag: {V_mag_new[0].item():.6f}")
-                    print(f"Final result: {(V_sign_new * V_mag_new)[0].item():.6f}")
-                    print("=" * 40)
-            else:
-                # Original complex domain mixing
-                R_lin, R_log = self._compute_aggregates(
-                    working_mag, working_sign, O_step
+                print(
+                    f"Input magnitudes: {working_mag[0, :self.num_initial_nodes].detach().cpu().numpy()}"
                 )
-                R_lin = tap(R_lin, "R_lin", self.enable_taps)
-                R_log = tap(R_log, "R_log", self.enable_taps)
+                print(
+                    f"Input signs: {working_sign[0, :self.num_initial_nodes].detach().cpu().numpy()}"
+                )
+                print(f"O_step: {O_step[0].detach().cpu().numpy()}")
+                print(
+                    f"G_step: {G_step[0].item():.6f} ({'LINEAR' if G_step[0].item() > 0.5 else 'LOG'})"
+                )
+                print(f"R_mixed: {R_mixed[0].item():.6f}")
 
-                # Debug: save intermediate computation results
-                self._debug_R_lin.append(R_lin.clone())
-                self._debug_R_log.append(R_log.clone())
+                # Check for numerical issues
+                if torch.abs(R_mixed).max() > self._log_lim:
+                    print(f"⚠️  R_mixed out of bounds!")
+                if torch.abs(log_mag_result).max() > self._mag_max:
+                    print(f"⚠️  log_mag_result out of bounds!")
 
-                if self._is_nan("R_lin", R_lin) and self.training:
-                    pdb.set_trace()
-                if self._is_nan("R_log", R_log) and self.training:
-                    pdb.set_trace()
-
-                V_sign_new = self._compute_new_sign(R_lin, working_sign, O_step, G_step)
-                V_mag_new = self._compute_new_magnitude(R_lin, R_log, G_step)
+                print(f"Linear sign: {linear_sign[0].item():.6f}")
+                print(f"Log sign: {log_sign[0].item():.6f}")
+                print(f"Final V_sign: {V_sign_new[0].item():.6f}")
+                print(f"Linear mag: {linear_mag[0].item():.6f}")
+                print(f"Log mag result: {log_mag_result[0].item():.6f}")
+                print(f"Final V_mag: {V_mag_new[0].item():.6f}")
+                print(f"Final result: {(V_sign_new * V_mag_new)[0].item():.6f}")
+                print("=" * 40)
 
             # Debug: save new computed values
             self._debug_V_sign_new.append(V_sign_new.clone())
