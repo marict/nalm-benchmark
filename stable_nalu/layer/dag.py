@@ -158,6 +158,7 @@ class DAGLayer(ExtendedTorchModule):
       this implementation currently supports out_features == 1.
     - The DAG depth defaults to in_features - 1, but can be overridden via kwarg
       'dag_depth' when constructing the layer through the GeneralizedLayer.
+    - DON'T GET GRAD CLIP NORM -- helps a lot for grokking
     """
 
     def __init__(
@@ -167,23 +168,17 @@ class DAGLayer(ExtendedTorchModule):
         dag_depth: int,
         writer: str = None,
         name: str | None = None,
-        freeze_g_linear: bool = False,
-        freeze_g_log: bool = False,
         use_simple_domain_mixing: bool = True,
-        use_soft_clamping: bool = True,
-        div_biased_init_G: bool = False,
-        div_biased_init_O_select: bool = False,
-        div_biased_init_O_sign: bool = False,
-        div_biased_init_O_mag_all_inputs: bool = False,
-        mixed_sign_init: bool = False,
         use_attention_prediction: bool = False,
-        alternating_sign_init: bool = True,
         use_dense_features: bool = False,
-        use_complex_sign: bool = True,
         extended_mul_features: bool = False,
         _enable_debug_logging: bool = False,
-        _enable_taps: bool = False,
+        _enable_taps: bool = True,
         _do_not_predict_weights: bool = False,
+        freeze_g_log: bool = False,
+        freeze_g_linear: bool = False,
+        freeze_O_selectors_div: bool = False,
+        freeze_O_selector_mul: bool = True,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -203,20 +198,14 @@ class DAGLayer(ExtendedTorchModule):
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
         self.use_simple_domain_mixing = bool(use_simple_domain_mixing)
-        self.use_soft_clamping = bool(use_soft_clamping)
-        self.div_biased_init_G = bool(div_biased_init_G)
-        self.div_biased_init_O_select = bool(div_biased_init_O_select)
-        self.div_biased_init_O_sign = bool(div_biased_init_O_sign)
-        self.div_biased_init_O_mag_all_inputs = bool(div_biased_init_O_mag_all_inputs)
-        self.mixed_sign_init = bool(mixed_sign_init)
-        self.alternating_sign_init = bool(alternating_sign_init)
         self.use_attention_prediction = bool(use_attention_prediction)
         self.enable_debug_logging = bool(_enable_debug_logging)
         self.enable_taps = bool(_enable_taps)
         self._do_not_predict_weights = bool(_do_not_predict_weights)
         self.use_dense_features = bool(use_dense_features)
         self.extended_mul_features = bool(extended_mul_features)
-        self.use_complex_sign = bool(use_complex_sign)
+        self.freeze_O_selectors_div = bool(freeze_O_selectors_div)
+        self.freeze_O_selector_mul = bool(freeze_O_selector_mul)
 
         # Calculate input size for heads based on dense features
         if self.use_dense_features:
@@ -277,118 +266,38 @@ class DAGLayer(ExtendedTorchModule):
         self._log_lim = math.log(self._mag_max) - 1.0
 
     def reset_parameters(self) -> None:
-        # Always start with standard weight initialization
-        nn.init.normal_(self.O_mag_head.weight, mean=0.0, std=0.02)
-        nn.init.normal_(self.O_sign_head.weight, mean=0.0, std=0.02)
-        nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
-        nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
-
-        # Apply biases conditionally based on flags
-        self._apply_div_biased_initialization()
-
-    def _apply_div_biased_initialization(self) -> None:
-        """Apply division-biased initialization based on separate flags."""
-
-        # Initialize all biases to zero first
+        # Use Xavier initialization for all weights
+        nn.init.xavier_uniform_(self.O_mag_head.weight)
+        nn.init.xavier_uniform_(self.O_sign_head.weight)
+        nn.init.xavier_uniform_(self.G_head.weight)
+        nn.init.xavier_uniform_(self.output_selector_head.weight)
+        
+        # Initialize all biases to zero
         nn.init.zeros_(self.O_mag_head.bias)
         nn.init.zeros_(self.O_sign_head.bias)
         nn.init.zeros_(self.G_head.bias)
         nn.init.zeros_(self.output_selector_head.bias)
-
+        
+        # Apply frozen selector initialization if enabled
         with torch.no_grad():
-            # 1. Operand Magnitude: Bias toward selecting input nodes (if any bias flag is set)
-            if any(
-                [
-                    self.div_biased_init_G,
-                    self.div_biased_init_O_select,
-                    self.div_biased_init_O_sign,
-                ]
-            ):
+            if self.freeze_O_selectors_div:
+                # Initialize bias for division pattern [1, -1, 0, ...]
                 for step in range(self.dag_depth):
                     step_start = step * self.total_nodes
-                    step_end = step_start + self.total_nodes
-
-                    # Bias input nodes positively (encourage selection)
-                    self.O_mag_head.bias[
-                        step_start : step_start + self.num_initial_nodes
-                    ] = 1.0
-                    # Bias computed nodes negatively (discourage selection initially)
-                    self.O_mag_head.bias[
-                        step_start + self.num_initial_nodes : step_end
-                    ] = -2.0
-
-            # 1b. Alternative: Set all input magnitudes to 1.0 (use all inputs)
-            if self.div_biased_init_O_mag_all_inputs:
-                for step in range(self.dag_depth):
-                    step_start = step * self.total_nodes
-
-                    # Set all input nodes to strongly positive (use all inputs equally)
-                    self.O_mag_head.bias[
-                        step_start : step_start + self.num_initial_nodes
-                    ] = 2.0
-                    # Set computed nodes to zero (neutral)
-                    self.O_mag_head.bias[
-                        step_start
-                        + self.num_initial_nodes : step_start
-                        + self.total_nodes
-                    ] = 0.0
-
-            # 2a. Operand Signs: Bias toward division pattern [all negative] if enabled
-            if self.div_biased_init_O_sign:
-                for step in range(self.dag_depth):
-                    step_start = step * self.total_nodes
-
-                    # Set all negative bias pattern: all operands negative
-                    for i in range(self.num_initial_nodes):
-                        self.O_sign_head.bias[step_start + i] = (
-                            -1.0
-                        )  # All inputs: negative bias
-
-                    # Other nodes start at zero (already initialized above)
-
-            # 2b. Operand Signs: Mixed (+1, -1) pattern for balanced grokking
-            elif self.mixed_sign_init:
-                for step in range(self.dag_depth):
-                    step_start = step * self.total_nodes
-
-                    # Set mixed pattern: first positive, second negative
                     if self.num_initial_nodes >= 2:
-                        self.O_sign_head.bias[step_start] = 1.0  # First input: positive
-                        self.O_sign_head.bias[step_start + 1] = (
-                            -1.0
-                        )  # Second input: negative
-
-                        # Additional inputs remain at zero (already initialized above)
-
-                    # Computed nodes remain at zero (already initialized above)
-
-            # 2c. Operand Signs: Mixed div/mul pattern [+1, -1, +1, +1, +1, -1, ...] if enabled
-            elif self.alternating_sign_init:
+                        self.O_sign_head.bias[step_start] = 1.0      # First input: positive
+                        self.O_sign_head.bias[step_start + 1] = -1.0  # Second input: negative
+                        # Remaining positions stay at 0
+            
+            elif self.freeze_O_selector_mul:
+                # Initialize bias for multiplication pattern [1, 1, 0, ...]
                 for step in range(self.dag_depth):
                     step_start = step * self.total_nodes
+                    if self.num_initial_nodes >= 2:
+                        self.O_sign_head.bias[step_start] = 1.0      # First input: positive
+                        self.O_sign_head.bias[step_start + 1] = 1.0  # Second input: positive
+                        # Remaining positions stay at 0
 
-                    # Set mixed div/mul pattern for input nodes
-                    # Pattern: [+1, -1, +1, +1, +1, -1, +1, +1, +1, -1, ...]
-                    # Cycles through: div (+,-), mul (+,+), mul (+,+), repeat (5-element cycle)
-                    pattern = [1.0, -1.0, 1.0, 1.0, 1.0]  # 5-element cycle: div + 2*mul
-                    for i in range(self.num_initial_nodes):
-                        sign_bias = pattern[i % len(pattern)]
-                        self.O_sign_head.bias[step_start + i] = sign_bias
-
-                    # Computed nodes remain at zero (already initialized above)
-
-            # 3. Domain Gates: Bias toward log domain if enabled
-            if self.div_biased_init_G:
-                self.G_head.bias.fill_(-1.0)  # Bias toward log domain (G=0)
-
-            # 4. Output Selector: Bias toward selecting first computation step if enabled
-            if self.div_biased_init_O_select:
-                if self.dag_depth >= 1:
-                    self.output_selector_head.bias[0] = 2.0  # Strongly favor first step
-                    for i in range(1, self.dag_depth):
-                        self.output_selector_head.bias[i] = (
-                            -1.0
-                        )  # Discourage later steps
 
     def extract_dense_features(self, input: torch.Tensor) -> torch.Tensor:
         """Extract dense features from each input element.
@@ -544,6 +453,29 @@ class DAGLayer(ExtendedTorchModule):
         O_mag = O_mag * O_mask
         O_sign = O_sign * O_mask
         O = O_sign * O_mag
+        
+        # Apply selector freezing if enabled
+        if self.freeze_O_selectors_div:
+            # Freeze to division pattern: [1, -1, 0, 0, 0, ...] for all steps
+            pattern = torch.zeros(self.total_nodes, device=O.device, dtype=O.dtype)
+            if self.num_initial_nodes >= 2:
+                pattern[0] = 1.0   # First input: positive
+                pattern[1] = -1.0  # Second input: negative
+                # Remaining positions stay at 0
+            
+            # Apply pattern to all DAG steps and all batch elements
+            O = pattern.unsqueeze(0).unsqueeze(0).expand(B, self.dag_depth, -1)
+        elif self.freeze_O_selector_mul:
+            # Freeze to multiplication pattern: [1, 1, 0, 0, 0, ...] for all steps
+            pattern = torch.zeros(self.total_nodes, device=O.device, dtype=O.dtype)
+            if self.num_initial_nodes >= 2:
+                pattern[0] = 1.0   # First input: positive
+                pattern[1] = 1.0   # Second input: positive
+                # Remaining positions stay at 0
+            
+            # Apply pattern to all DAG steps and all batch elements
+            O = pattern.unsqueeze(0).unsqueeze(0).expand(B, self.dag_depth, -1)
+        
         O = tap(O, "O_selector", self.enable_taps)
 
         eps = 1e-5
@@ -760,34 +692,22 @@ class DAGLayer(ExtendedTorchModule):
                 # Simple sign computation with sharp tanh
                 linear_sign = torch.tanh(R_mixed / 1e-4)
 
-                if self.use_complex_sign:
-                    # Use complex sign computation with cos trick from the original domain mixing
-                    w = torch.abs(O_step)
-                    neg_frac = 0.5 * (
-                        1.0 - working_sign
-                    )  # 1 for −1, 0 for +1, fractional if soft
-                    m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
-                    # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
-                    log_sign = torch.cos(math.pi * m)
-                else:
-                    # Original simple sign computation
-                    sign_weights = (working_sign * torch.abs(O_step)) * 2.0 + 1.0
-                    log_sign = torch.tanh(
-                        torch.prod(sign_weights, dim=-1, keepdim=True) / 1e-4
-                    )
+                # Use complex sign computation with cos trick from the original domain mixing
+                w = torch.abs(O_step)
+                neg_frac = 0.5 * (
+                    1.0 - working_sign
+                )  # 1 for −1, 0 for +1, fractional if soft
+                m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+                # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
+                log_sign = torch.cos(math.pi * m)
 
                 V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
 
                 # Simple magnitude computation
                 linear_mag = torch.clamp(torch.abs(R_mixed), max=self._mag_max)
-                if self.use_soft_clamping:
-                    R_mixed_clamped = self.soft_clamp(
-                        R_mixed, min=-self._log_lim, max=self._log_lim
-                    )
-                else:
-                    R_mixed_clamped = torch.clamp(
-                        R_mixed, min=-self._log_lim, max=self._log_lim
-                    )
+                R_mixed_clamped = self.soft_clamp(
+                    R_mixed, min=-self._log_lim, max=self._log_lim
+                )
                 log_mag_result = torch.exp(R_mixed_clamped)
                 V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
             else:
