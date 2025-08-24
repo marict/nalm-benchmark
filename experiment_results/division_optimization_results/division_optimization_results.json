@@ -1,0 +1,414 @@
+{
+  "metadata": {
+    "base_hyperparams": {
+      "layer_type": "DAG",
+      "operation": "div",
+      "input_size": 2,
+      "interpolation_range": "[-2.0,2.0]",
+      "extrapolation_range": "[[-6.0,-2.0],[2.0,6.0]]",
+      "no_cuda": true,
+      "max_iterations": 2000,
+      "log_interval": 200,
+      "no_open_browser": true
+    },
+    "search_space": {
+      "learning_rate": [
+        0.005,
+        0.008,
+        0.01,
+        0.012,
+        0.015
+      ],
+      "batch_size": [
+        256,
+        512,
+        768
+      ],
+      "clip_grad_norm": [
+        0.005,
+        0.01,
+        0.02,
+        0.05
+      ],
+      "max_target_magnitude": [
+        null,
+        50.0,
+        100.0
+      ]
+    },
+    "test_seeds": [
+      223,
+      221,
+      345
+    ],
+    "max_iterations": 2000,
+    "grokking_threshold": 1e-08
+  },
+  "all_results": [
+    {
+      "config_id": 0,
+      "config": {
+        "learning_rate": 0.01,
+        "batch_size": 512,
+        "clip_grad_norm": 0.01,
+        "max_target_magnitude": null
+      },
+      "seed": 223,
+      "success": true,
+      "grokked": true,
+      "early_stopped": true,
+      "grok_step": 520,
+      "duration": 34.6271390914917,
+      "final_inter_loss": 0.0,
+      "final_extra_loss": 0.0
+    },
+    {
+      "config_id": 0,
+      "config": {
+        "learning_rate": 0.01,
+        "batch_size": 512,
+        "clip_grad_norm": 0.01,
+        "max_target_magnitude": null
+      },
+      "seed": 221,
+      "success": true,
+      "grokked": true,
+      "early_stopped": true,
+      "grok_step": 888,
+      "duration": 52.596612215042114,
+      "final_inter_loss": 0.0,
+      "final_extra_loss": 0.0
+    },
+    {
+      "config_id": 0,
+      "config": {
+        "learning_rate": 0.01,
+        "batch_size": 512,
+        "clip_grad_norm": 0.01,
+        "max_target_magnitude": null
+      },
+      "seed": 345,
+      "success": true,
+      "grokked": true,
+      "early_stopped": true,
+      "grok_step": 1063,
+      "duration": 59.034440994262695,
+      "final_inter_loss": 0.0,
+      "final_extra_loss": 0.0
+    },
+    {
+      "config_id": 1,
+      "config": {
+        "learning_rate": 0.012,
+        "batch_size": 512,
+        "clip_grad_norm": 0.005,
+        "max_target_magnitude": null
+      },
+      "seed": 223,
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "grok_step": null,
+      "duration": 101.1200270652771,
+      "final_inter_loss": 25.5149497986,
+      "final_extra_loss": Infinity
+    },
+    {
+      "config_id": 1,
+      "config": {
+        "learning_rate": 0.012,
+        "batch_size": 512,
+        "clip_grad_norm": 0.005,
+        "max_target_magnitude": null
+      },
+      "seed": 221,
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "grok_step": null,
+      "duration": 99.2289879322052,
+      "final_inter_loss": 47.4647407532,
+      "final_extra_loss": Infinity
+    },
+    {
+      "config_id": 1,
+      "config": {
+        "learning_rate": 0.012,
+        "batch_size": 512,
+        "clip_grad_norm": 0.005,
+        "max_target_magnitude": null
+      },
+      "seed": 345,
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "grok_step": null,
+      "duration": 99.06360507011414,
+      "final_inter_loss": 6627273728.0,
+      "final_extra_loss": Infinity
+    },
+    {
+      "config_id": 2,
+      "config": {
+        "learning_rate": 0.01,
+        "batch_size": 256,
+        "clip_grad_norm": 0.01,
+        "max_target_magnitude": null
+      },
+      "seed": 223,
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "grok_step": null,
+      "duration": 97.56856298446655,
+      "final_inter_loss": 48.5480499268,
+      "final_extra_loss": Infinity
+    },
+    {
+      "config_id": 2,
+      "config": {
+        "learning_rate": 0.01,
+        "batch_size": 256,
+        "clip_grad_norm": 0.01,
+        "max_target_magnitude": null
+      },
+      "seed": 221,
+      "success": true,
+      "grokked": true,
+      "early_stopped": true,
+      "grok_step": 1263,
+      "duration": 66.27731108665466,
+      "final_inter_loss": 0.0,
+      "final_extra_loss": 0.0
+    },
+    {
+      "config_id": 2,
+      "config": {
+        "learning_rate": 0.01,
+        "batch_size": 256,
+        "clip_grad_norm": 0.01,
+        "max_target_magnitude": null
+      },
+      "seed": 345,
+      "success": true,
+      "grokked": false,
+      "early_stopped": false,
+      "grok_step": null,
+      "duration": 97.26210403442383,
+      "final_inter_loss": 26.3642349243,
+      "final_extra_loss": Infinity
+    }
+  ],
+  "config_analysis": [
+    {
+      "config_id": 0,
+      "config": {
+        "learning_rate": 0.01,
+        "batch_size": 512,
+        "clip_grad_norm": 0.01,
+        "max_target_magnitude": null
+      },
+      "total_seeds": 3,
+      "success_rate": 1.0,
+      "grok_rate": 1.0,
+      "grokked_count": 3,
+      "avg_grok_step": 823.6666666666666,
+      "grokked_seeds": [
+        223,
+        221,
+        345
+      ],
+      "all_results": [
+        {
+          "config_id": 0,
+          "config": {
+            "learning_rate": 0.01,
+            "batch_size": 512,
+            "clip_grad_norm": 0.01,
+            "max_target_magnitude": null
+          },
+          "seed": 223,
+          "success": true,
+          "grokked": true,
+          "early_stopped": true,
+          "grok_step": 520,
+          "duration": 34.6271390914917,
+          "final_inter_loss": 0.0,
+          "final_extra_loss": 0.0
+        },
+        {
+          "config_id": 0,
+          "config": {
+            "learning_rate": 0.01,
+            "batch_size": 512,
+            "clip_grad_norm": 0.01,
+            "max_target_magnitude": null
+          },
+          "seed": 221,
+          "success": true,
+          "grokked": true,
+          "early_stopped": true,
+          "grok_step": 888,
+          "duration": 52.596612215042114,
+          "final_inter_loss": 0.0,
+          "final_extra_loss": 0.0
+        },
+        {
+          "config_id": 0,
+          "config": {
+            "learning_rate": 0.01,
+            "batch_size": 512,
+            "clip_grad_norm": 0.01,
+            "max_target_magnitude": null
+          },
+          "seed": 345,
+          "success": true,
+          "grokked": true,
+          "early_stopped": true,
+          "grok_step": 1063,
+          "duration": 59.034440994262695,
+          "final_inter_loss": 0.0,
+          "final_extra_loss": 0.0
+        }
+      ]
+    },
+    {
+      "config_id": 2,
+      "config": {
+        "learning_rate": 0.01,
+        "batch_size": 256,
+        "clip_grad_norm": 0.01,
+        "max_target_magnitude": null
+      },
+      "total_seeds": 3,
+      "success_rate": 1.0,
+      "grok_rate": 0.3333333333333333,
+      "grokked_count": 1,
+      "avg_grok_step": 1263.0,
+      "grokked_seeds": [
+        221
+      ],
+      "all_results": [
+        {
+          "config_id": 2,
+          "config": {
+            "learning_rate": 0.01,
+            "batch_size": 256,
+            "clip_grad_norm": 0.01,
+            "max_target_magnitude": null
+          },
+          "seed": 223,
+          "success": true,
+          "grokked": false,
+          "early_stopped": false,
+          "grok_step": null,
+          "duration": 97.56856298446655,
+          "final_inter_loss": 48.5480499268,
+          "final_extra_loss": Infinity
+        },
+        {
+          "config_id": 2,
+          "config": {
+            "learning_rate": 0.01,
+            "batch_size": 256,
+            "clip_grad_norm": 0.01,
+            "max_target_magnitude": null
+          },
+          "seed": 221,
+          "success": true,
+          "grokked": true,
+          "early_stopped": true,
+          "grok_step": 1263,
+          "duration": 66.27731108665466,
+          "final_inter_loss": 0.0,
+          "final_extra_loss": 0.0
+        },
+        {
+          "config_id": 2,
+          "config": {
+            "learning_rate": 0.01,
+            "batch_size": 256,
+            "clip_grad_norm": 0.01,
+            "max_target_magnitude": null
+          },
+          "seed": 345,
+          "success": true,
+          "grokked": false,
+          "early_stopped": false,
+          "grok_step": null,
+          "duration": 97.26210403442383,
+          "final_inter_loss": 26.3642349243,
+          "final_extra_loss": Infinity
+        }
+      ]
+    },
+    {
+      "config_id": 1,
+      "config": {
+        "learning_rate": 0.012,
+        "batch_size": 512,
+        "clip_grad_norm": 0.005,
+        "max_target_magnitude": null
+      },
+      "total_seeds": 3,
+      "success_rate": 1.0,
+      "grok_rate": 0.0,
+      "grokked_count": 0,
+      "avg_grok_step": null,
+      "grokked_seeds": [],
+      "all_results": [
+        {
+          "config_id": 1,
+          "config": {
+            "learning_rate": 0.012,
+            "batch_size": 512,
+            "clip_grad_norm": 0.005,
+            "max_target_magnitude": null
+          },
+          "seed": 223,
+          "success": true,
+          "grokked": false,
+          "early_stopped": false,
+          "grok_step": null,
+          "duration": 101.1200270652771,
+          "final_inter_loss": 25.5149497986,
+          "final_extra_loss": Infinity
+        },
+        {
+          "config_id": 1,
+          "config": {
+            "learning_rate": 0.012,
+            "batch_size": 512,
+            "clip_grad_norm": 0.005,
+            "max_target_magnitude": null
+          },
+          "seed": 221,
+          "success": true,
+          "grokked": false,
+          "early_stopped": false,
+          "grok_step": null,
+          "duration": 99.2289879322052,
+          "final_inter_loss": 47.4647407532,
+          "final_extra_loss": Infinity
+        },
+        {
+          "config_id": 1,
+          "config": {
+            "learning_rate": 0.012,
+            "batch_size": 512,
+            "clip_grad_norm": 0.005,
+            "max_target_magnitude": null
+          },
+          "seed": 345,
+          "success": true,
+          "grokked": false,
+          "early_stopped": false,
+          "grok_step": null,
+          "duration": 99.06360507011414,
+          "final_inter_loss": 6627273728.0,
+          "final_extra_loss": Infinity
+        }
+      ]
+    }
+  ]
+}

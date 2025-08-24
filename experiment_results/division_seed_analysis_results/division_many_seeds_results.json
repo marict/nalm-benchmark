@@ -1,0 +1,252 @@
+{
+  "config": {
+    "layer_type": "DAG",
+    "operation": "div",
+    "learning_rate": 0.01,
+    "batch_size": 512,
+    "clip_grad_norm": 0.01,
+    "input_size": 2,
+    "max_iterations": 2000,
+    "interpolation_range": "[-2.0,2.0]",
+    "extrapolation_range": "[[-6.0,-2.0],[2.0,6.0]]",
+    "no_cuda": true,
+    "log_interval": 200,
+    "no_open_browser": true
+  },
+  "total_seeds": 27,
+  "completed": 27,
+  "results": [
+    {
+      "seed": 1,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 48.0978317261,
+      "duration": 97.13903617858887
+    },
+    {
+      "seed": 7,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 21.4715957642,
+      "duration": 100.10592722892761
+    },
+    {
+      "seed": 42,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 25.9931411743,
+      "duration": 101.24993586540222
+    },
+    {
+      "seed": 99,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 3020671744.0,
+      "duration": 100.16306376457214
+    },
+    {
+      "seed": 123,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 48.0978317261,
+      "duration": 100.24161314964294
+    },
+    {
+      "seed": 221,
+      "success": true,
+      "grokked": true,
+      "grok_step": 888,
+      "final_loss": 0.0,
+      "duration": 51.50076174736023
+    },
+    {
+      "seed": 223,
+      "success": true,
+      "grokked": true,
+      "grok_step": 520,
+      "final_loss": 0.0,
+      "duration": 35.19504904747009
+    },
+    {
+      "seed": 234,
+      "success": false,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 48.8258972168,
+      "duration": 66.4194688796997
+    },
+    {
+      "seed": 345,
+      "success": true,
+      "grokked": true,
+      "grok_step": 1063,
+      "final_loss": 0.0,
+      "duration": 60.10683584213257
+    },
+    {
+      "seed": 456,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 25.9931411743,
+      "duration": 99.0473358631134
+    },
+    {
+      "seed": 567,
+      "success": true,
+      "grokked": true,
+      "grok_step": 1039,
+      "final_loss": 0.0,
+      "duration": 58.04882097244263
+    },
+    {
+      "seed": 678,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 1308.2447509766,
+      "duration": 101.21340894699097
+    },
+    {
+      "seed": 789,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 21.4715957642,
+      "duration": 102.53180694580078
+    },
+    {
+      "seed": 890,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 48.5480499268,
+      "duration": 102.02441215515137
+    },
+    {
+      "seed": 1001,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 21.4715957642,
+      "duration": 103.54603004455566
+    },
+    {
+      "seed": 1123,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 19145208.0,
+      "duration": 100.33060193061829
+    },
+    {
+      "seed": 1234,
+      "success": true,
+      "grokked": true,
+      "grok_step": 1306,
+      "final_loss": 0.0,
+      "duration": 71.38729286193848
+    },
+    {
+      "seed": 1337,
+      "success": true,
+      "grokked": true,
+      "grok_step": 1048,
+      "final_loss": 0.0,
+      "duration": 59.2446711063385
+    },
+    {
+      "seed": 2024,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 25.9931411743,
+      "duration": 101.22428393363953
+    },
+    {
+      "seed": 3141,
+      "success": true,
+      "grokked": true,
+      "grok_step": 653,
+      "final_loss": 0.0,
+      "duration": 41.142805099487305
+    },
+    {
+      "seed": 4242,
+      "success": true,
+      "grokked": true,
+      "grok_step": 497,
+      "final_loss": 0.0,
+      "duration": 34.29015517234802
+    },
+    {
+      "seed": 5555,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 1308.5238037109,
+      "duration": 99.91078686714172
+    },
+    {
+      "seed": 5678,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 21.4715957642,
+      "duration": 102.5807466506958
+    },
+    {
+      "seed": 6789,
+      "success": true,
+      "grokked": true,
+      "grok_step": 561,
+      "final_loss": 0.0,
+      "duration": 37.77772784233093
+    },
+    {
+      "seed": 7890,
+      "success": true,
+      "grokked": true,
+      "grok_step": 1908,
+      "final_loss": 0.0,
+      "duration": 98.953537940979
+    },
+    {
+      "seed": 8888,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 2079.1081542969,
+      "duration": 101.33634400367737
+    },
+    {
+      "seed": 9999,
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 26.6262378693,
+      "duration": 101.24947595596313
+    }
+  ],
+  "summary": {
+    "grok_rate": 37.03703703703704,
+    "grokked_count": 10,
+    "grokked_seeds": [
+      221,
+      223,
+      345,
+      567,
+      1234,
+      1337,
+      3141,
+      4242,
+      6789,
+      7890
+    ]
+  }
+}

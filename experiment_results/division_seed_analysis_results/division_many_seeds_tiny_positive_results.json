@@ -1,0 +1,148 @@
+{
+  "range_config": {
+    "name": "tiny_positive",
+    "interpolation_range": "[1.1,1.2]",
+    "extrapolation_range": "[1.2,6.0]"
+  },
+  "base_config": {
+    "layer_type": "DAG",
+    "operation": "div",
+    "learning_rate": 0.01,
+    "batch_size": 512,
+    "clip_grad_norm": 0.01,
+    "input_size": 2,
+    "max_iterations": 2000,
+    "no_cuda": true,
+    "log_interval": 200,
+    "no_open_browser": true
+  },
+  "total_seeds": 10,
+  "completed": 10,
+  "results": [
+    {
+      "seed": 221,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 699,
+      "final_loss": 0.0,
+      "duration": 63.002307176589966
+    },
+    {
+      "seed": 223,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 1354,
+      "final_loss": 0.0,
+      "duration": 108.46325206756592
+    },
+    {
+      "seed": 345,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 947,
+      "final_loss": 0.0,
+      "duration": 79.82402777671814
+    },
+    {
+      "seed": 567,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": false,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.5182498097,
+      "duration": 9.102155923843384
+    },
+    {
+      "seed": 1234,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 983,
+      "final_loss": 0.0,
+      "duration": 75.05994391441345
+    },
+    {
+      "seed": 1337,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 777,
+      "final_loss": 0.0,
+      "duration": 61.961997747421265
+    },
+    {
+      "seed": 3141,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 846,
+      "final_loss": 0.0,
+      "duration": 64.75065517425537
+    },
+    {
+      "seed": 4242,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 846,
+      "final_loss": 0.0,
+      "duration": 66.35695791244507
+    },
+    {
+      "seed": 6789,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 560,
+      "final_loss": 0.0,
+      "duration": 45.71255087852478
+    },
+    {
+      "seed": 7890,
+      "range_config": "tiny_positive",
+      "interpolation_range": "[1.1,1.2]",
+      "extrapolation_range": "[1.2,6.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 690,
+      "final_loss": 0.0,
+      "duration": 53.95390510559082
+    }
+  ],
+  "summary": {
+    "grok_rate": 90.0,
+    "grokked_count": 9,
+    "grokked_seeds": [
+      221,
+      223,
+      345,
+      1234,
+      1337,
+      3141,
+      4242,
+      6789,
+      7890
+    ]
+  }
+}

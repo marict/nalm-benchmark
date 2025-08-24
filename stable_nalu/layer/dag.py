@@ -6,7 +6,14 @@ import pdb
 import torch
 import torch.nn as nn
 
-from debug_utils import tap
+
+# Simple tap function for debugging
+def tap(tensor, name, enabled=True):
+    """Simple tensor debugging function."""
+    if enabled:
+        print(f"{name}: {tensor.shape} | {tensor.dtype}")
+    return tensor
+
 
 from ..abstract import ExtendedTorchModule
 
@@ -34,6 +41,107 @@ python experiments/single_layer_benchmark.py \
   - Div: Groks at 888 steps
 
 """
+
+
+class AttentionDAGPredictor(nn.Module):
+    """Heavily parameterized attention-based predictor for DAG structure.
+
+    Uses multi-head attention to analyze input relationships and predict
+    operand selectors, domain gates, and output selectors based on learned
+    patterns in the input vector.
+    """
+
+    def __init__(
+        self,
+        input_size: int,  # size per feature (1 for raw input, 8 for dense features)
+        num_features: int,  # number of input features
+        dag_depth: int,
+        total_nodes: int,
+        d_model: int = 256,  # attention hidden dimension
+        num_heads: int = 8,  # multi-head attention heads
+        num_layers: int = 4,  # transformer layers
+    ):
+        super().__init__()
+
+        self.input_size = input_size
+        self.num_features = num_features
+        self.dag_depth = dag_depth
+        self.total_nodes = total_nodes
+        self.d_model = d_model
+
+        # Project input features to attention dimension
+        self.input_projection = nn.Linear(input_size, d_model)
+
+        # Multi-head attention layers
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=num_heads,
+            dim_feedforward=d_model * 4,
+            dropout=0.1,
+            activation="relu",
+            batch_first=True,
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        # Output projections for DAG components
+        self.O_mag_projector = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.ReLU(),
+            nn.Linear(d_model, dag_depth * total_nodes),
+        )
+
+        self.O_sign_projector = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.ReLU(),
+            nn.Linear(d_model, dag_depth * total_nodes),
+        )
+
+        self.G_projector = nn.Sequential(
+            nn.Linear(d_model, d_model), nn.ReLU(), nn.Linear(d_model, dag_depth)
+        )
+
+        self.output_selector_projector = nn.Sequential(
+            nn.Linear(d_model, d_model), nn.ReLU(), nn.Linear(d_model, dag_depth)
+        )
+
+        # Global pooling for sequence-to-vector
+        self.global_pool = nn.AdaptiveAvgPool1d(1)
+
+    def forward(
+        self, head_input: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            head_input: (B, num_features * input_size) - flattened input features
+
+        Returns:
+            O_mag_logits: (B, dag_depth * total_nodes)
+            O_sign_logits: (B, dag_depth * total_nodes)
+            G_logits: (B, dag_depth)
+            out_logits: (B, dag_depth)
+        """
+        B = head_input.size(0)
+
+        # Reshape to per-feature representation: (B, num_features, input_size)
+        feature_input = head_input.view(B, self.num_features, self.input_size)
+
+        # Project to attention dimension: (B, num_features, d_model)
+        projected = self.input_projection(feature_input)
+
+        # Apply transformer attention: (B, num_features, d_model)
+        attended = self.transformer(projected)
+
+        # Global pooling to get single representation: (B, d_model)
+        # attended: (B, num_features, d_model) -> (B, d_model, num_features)
+        pooled = self.global_pool(attended.transpose(-1, -2)).squeeze(-1)
+
+        # Generate DAG predictions
+        O_mag_logits = self.O_mag_projector(pooled)
+        O_sign_logits = self.O_sign_projector(pooled)
+        G_logits = self.G_projector(pooled)
+        out_logits = self.output_selector_projector(pooled)
+
+        return O_mag_logits, O_sign_logits, G_logits, out_logits
 
 
 # NOTE: Faster add convergence on no ste
@@ -66,9 +174,20 @@ class DAGLayer(ExtendedTorchModule):
         name: str | None = None,
         freeze_g_linear: bool = False,
         freeze_g_log: bool = False,
-        use_dense_features: bool = False,
+        use_simple_domain_mixing: bool = True,
+        use_soft_clamping: bool = True,
+        div_biased_init_G: bool = False,
+        div_biased_init_O_select: bool = False,
+        div_biased_init_O_sign: bool = False,
+        div_biased_init_O_mag_all_inputs: bool = False,
+        mixed_sign_init: bool = False,
+        alternating_sign_init: bool = True,
+        use_attention_prediction: bool = False,
+        use_dense_features: bool = True,
+        extended_mul_features: bool = False,
+        use_complex_sign: bool = True,
         _enable_debug_logging: bool = False,
-        _enable_taps: bool = True,
+        _enable_taps: bool = False,
         _do_not_predict_weights: bool = False,
         **kwargs,
     ) -> None:
@@ -88,15 +207,31 @@ class DAGLayer(ExtendedTorchModule):
 
         self.freeze_g_linear = bool(freeze_g_linear)
         self.freeze_g_log = bool(freeze_g_log)
+        self.use_simple_domain_mixing = bool(use_simple_domain_mixing)
+        self.use_soft_clamping = bool(use_soft_clamping)
+        self.div_biased_init_G = bool(div_biased_init_G)
+        self.div_biased_init_O_select = bool(div_biased_init_O_select)
+        self.div_biased_init_O_sign = bool(div_biased_init_O_sign)
+        self.div_biased_init_O_mag_all_inputs = bool(div_biased_init_O_mag_all_inputs)
+        self.mixed_sign_init = bool(mixed_sign_init)
+        self.alternating_sign_init = bool(alternating_sign_init)
+        self.use_attention_prediction = bool(use_attention_prediction)
         self.enable_debug_logging = bool(_enable_debug_logging)
         self.enable_taps = bool(_enable_taps)
         self._do_not_predict_weights = bool(_do_not_predict_weights)
         self.use_dense_features = bool(use_dense_features)
+        self.extended_mul_features = bool(extended_mul_features)
+        self.use_complex_sign = bool(use_complex_sign)
 
         # Calculate input size for heads based on dense features
         if self.use_dense_features:
-            # Dense features: [x, x^2, x^3, exp(x), log(|x|+eps), sin(x), cos(x), tanh(x)] per input
-            self.dense_features_per_input = 8
+            if self.extended_mul_features:
+                # Extended features: base 8 + extended 9 = 17 per input
+                # Extended: [x^4, x^5, x^(-1), x^(1/2), x^(1/3), log2(|x|), log10(|x|), 2^x, 10^x]
+                self.dense_features_per_input = 17
+            else:
+                # Dense features: [x, x^2, x^3, exp(x), log(|x|+eps), sin(x), cos(x), tanh(x)] per input
+                self.dense_features_per_input = 8
             head_input_size = in_features * self.dense_features_per_input
         else:
             head_input_size = in_features
@@ -128,6 +263,18 @@ class DAGLayer(ExtendedTorchModule):
 
         self.output_selector_head = nn.Linear(head_input_size, self.dag_depth)
 
+        # Attention-based DAG predictor (optional)
+        if self.use_attention_prediction:
+            self.attention_predictor = AttentionDAGPredictor(
+                input_size=head_input_size // in_features,  # per-feature size
+                num_features=in_features,
+                dag_depth=dag_depth,
+                total_nodes=self.total_nodes,
+                d_model=256,  # attention hidden size
+                num_heads=8,  # multi-head attention
+                num_layers=4,  # number of transformer layers
+            )
+
         self.reset_parameters()
 
         self._mag_min = 1e-11
@@ -135,20 +282,124 @@ class DAGLayer(ExtendedTorchModule):
         self._log_lim = math.log(self._mag_max) - 1.0
 
     def reset_parameters(self) -> None:
-        # Use consistent initialization like the working version
+        # Always start with standard weight initialization
         nn.init.normal_(self.O_mag_head.weight, mean=0.0, std=0.02)
-        nn.init.zeros_(self.O_mag_head.bias)
         nn.init.normal_(self.O_sign_head.weight, mean=0.0, std=0.02)
-        nn.init.zeros_(self.O_sign_head.bias)
         nn.init.normal_(self.G_head.weight, mean=0.0, std=0.02)
-        nn.init.zeros_(self.G_head.bias)
         nn.init.normal_(self.output_selector_head.weight, mean=0.0, std=0.02)
+
+        # Apply biases conditionally based on flags
+        self._apply_div_biased_initialization()
+
+    def _apply_div_biased_initialization(self) -> None:
+        """Apply division-biased initialization based on separate flags."""
+
+        # Initialize all biases to zero first
+        nn.init.zeros_(self.O_mag_head.bias)
+        nn.init.zeros_(self.O_sign_head.bias)
+        nn.init.zeros_(self.G_head.bias)
         nn.init.zeros_(self.output_selector_head.bias)
+
+        with torch.no_grad():
+            # 1. Operand Magnitude: Bias toward selecting input nodes (if any bias flag is set)
+            if any(
+                [
+                    self.div_biased_init_G,
+                    self.div_biased_init_O_select,
+                    self.div_biased_init_O_sign,
+                ]
+            ):
+                for step in range(self.dag_depth):
+                    step_start = step * self.total_nodes
+                    step_end = step_start + self.total_nodes
+
+                    # Bias input nodes positively (encourage selection)
+                    self.O_mag_head.bias[
+                        step_start : step_start + self.num_initial_nodes
+                    ] = 1.0
+                    # Bias computed nodes negatively (discourage selection initially)
+                    self.O_mag_head.bias[
+                        step_start + self.num_initial_nodes : step_end
+                    ] = -2.0
+
+            # 1b. Alternative: Set all input magnitudes to 1.0 (use all inputs)
+            if self.div_biased_init_O_mag_all_inputs:
+                for step in range(self.dag_depth):
+                    step_start = step * self.total_nodes
+
+                    # Set all input nodes to strongly positive (use all inputs equally)
+                    self.O_mag_head.bias[
+                        step_start : step_start + self.num_initial_nodes
+                    ] = 2.0
+                    # Set computed nodes to zero (neutral)
+                    self.O_mag_head.bias[
+                        step_start
+                        + self.num_initial_nodes : step_start
+                        + self.total_nodes
+                    ] = 0.0
+
+            # 2a. Operand Signs: Bias toward division pattern [all negative] if enabled
+            if self.div_biased_init_O_sign:
+                for step in range(self.dag_depth):
+                    step_start = step * self.total_nodes
+
+                    # Set all negative bias pattern: all operands negative
+                    for i in range(self.num_initial_nodes):
+                        self.O_sign_head.bias[step_start + i] = (
+                            -1.0
+                        )  # All inputs: negative bias
+
+                    # Other nodes start at zero (already initialized above)
+
+            # 2b. Operand Signs: Mixed (+1, -1) pattern for balanced grokking
+            elif self.mixed_sign_init:
+                for step in range(self.dag_depth):
+                    step_start = step * self.total_nodes
+
+                    # Set mixed pattern: first positive, second negative
+                    if self.num_initial_nodes >= 2:
+                        self.O_sign_head.bias[step_start] = 1.0  # First input: positive
+                        self.O_sign_head.bias[step_start + 1] = (
+                            -1.0
+                        )  # Second input: negative
+
+                        # Additional inputs remain at zero (already initialized above)
+
+                    # Computed nodes remain at zero (already initialized above)
+
+            # 2c. Operand Signs: Mixed div/mul pattern [+1, -1, +1, +1, +1, -1, ...] if enabled
+            elif self.alternating_sign_init:
+                for step in range(self.dag_depth):
+                    step_start = step * self.total_nodes
+
+                    # Set mixed div/mul pattern for input nodes
+                    # Pattern: [+1, -1, +1, +1, +1, -1, +1, +1, +1, -1, ...]
+                    # Cycles through: div (+,-), mul (+,+), mul (+,+), repeat (5-element cycle)
+                    pattern = [1.0, -1.0, 1.0, 1.0, 1.0]  # 5-element cycle: div + 2*mul
+                    for i in range(self.num_initial_nodes):
+                        sign_bias = pattern[i % len(pattern)]
+                        self.O_sign_head.bias[step_start + i] = sign_bias
+
+                    # Computed nodes remain at zero (already initialized above)
+
+            # 3. Domain Gates: Bias toward log domain if enabled
+            if self.div_biased_init_G:
+                self.G_head.bias.fill_(-1.0)  # Bias toward log domain (G=0)
+
+            # 4. Output Selector: Bias toward selecting first computation step if enabled
+            if self.div_biased_init_O_select:
+                if self.dag_depth >= 1:
+                    self.output_selector_head.bias[0] = 2.0  # Strongly favor first step
+                    for i in range(1, self.dag_depth):
+                        self.output_selector_head.bias[i] = (
+                            -1.0
+                        )  # Discourage later steps
 
     def extract_dense_features(self, input: torch.Tensor) -> torch.Tensor:
         """Extract dense features from each input element.
 
-        For each input x, compute: [x, x^2, x^3, exp(x), log(|x|+eps), sin(x), cos(x), tanh(x)]
+        Standard: [x, x^2, x^3, exp(x), log(|x|+eps), sin(x), cos(x), tanh(x)]
+        Extended: adds [x^4, x^5, x^(-1), x^(1/2), x^(1/3), log2(|x|+eps), log10(|x|+eps), 2^x, 10^x]
         """
         eps = 1e-6
 
@@ -169,11 +420,57 @@ class DAGLayer(ExtendedTorchModule):
         # Hyperbolic feature
         tanh_x = torch.tanh(x)
 
-        # Stack all features along the last dimension
-        # Shape: (B, in_features, dense_features_per_input)
-        dense_features = torch.stack(
-            [x, x2, x3, exp_x, log_abs_x, sin_x, cos_x, tanh_x], dim=-1
-        )
+        if self.extended_mul_features:
+            # Extended polynomial features
+            x4 = x3 * x
+            x5 = x4 * x
+            x_inv = 1.0 / (torch.abs(x) + eps)  # x^(-1), prevent division by zero
+            x_sqrt = torch.sign(x) * torch.sqrt(
+                torch.abs(x) + eps
+            )  # x^(1/2), preserve sign
+            x_cbrt = torch.sign(x) * torch.pow(
+                torch.abs(x) + eps, 1.0 / 3.0
+            )  # x^(1/3), preserve sign
+
+            # Extended logarithmic features
+            log2_abs_x = torch.log2(torch.abs(x) + eps)
+            log10_abs_x = torch.log10(torch.abs(x) + eps)
+
+            # Extended exponential features (with additional clamping)
+            x_very_clamped = torch.clamp(
+                x, min=-5.0, max=5.0
+            )  # More conservative for large bases
+            exp2_x = torch.pow(2.0, x_very_clamped)
+            exp10_x = torch.pow(10.0, x_very_clamped)
+
+            # Stack all features (17 total)
+            dense_features = torch.stack(
+                [
+                    x,
+                    x2,
+                    x3,
+                    exp_x,
+                    log_abs_x,
+                    sin_x,
+                    cos_x,
+                    tanh_x,  # Original 8
+                    x4,
+                    x5,
+                    x_inv,
+                    x_sqrt,
+                    x_cbrt,
+                    log2_abs_x,
+                    log10_abs_x,
+                    exp2_x,
+                    exp10_x,  # Extended 9
+                ],
+                dim=-1,
+            )
+        else:
+            # Original features (8 total)
+            dense_features = torch.stack(
+                [x, x2, x3, exp_x, log_abs_x, sin_x, cos_x, tanh_x], dim=-1
+            )
 
         # Flatten to (B, in_features * dense_features_per_input)
         B, in_features, _ = dense_features.shape
@@ -187,32 +484,55 @@ class DAGLayer(ExtendedTorchModule):
         else:
             head_input = input
 
-        # Apply input normalization (gated behind flag)
-        # Massive LayerNorm stack to normalize
-        # The comment to the right is the number of steps to grok for ops: mul, add
-        # all seed 33232323
-        if not self.use_dense_features:
-            head_input = self.input_norm(head_input)  # inf, inf
-        head_input = self.extra_norm1(head_input)  # inf, 75
-        head_input = self.extra_norm2(head_input)  # 1119, 51
-        head_input = self.extra_norm3(head_input)  # 649, 52
-        head_input = self.extra_norm4(head_input)  # 157, 46
-        head_input = self.extra_norm5(head_input)  # 108, 50
-        head_input = self.extra_norm6(head_input)  # 216, 46
-        head_input = self.extra_norm7(head_input)  # 108, 50
-        head_input = self.extra_norm8(head_input)  # 216, 46
-        head_input = self.extra_norm9(head_input)  # 108, 50
-        head_input = self.extra_norm10(head_input)  # 216, 46
+        if self.use_attention_prediction:
+            # Use attention-based predictor
+            O_mag_flat, O_sign_flat, G_logits, out_logits = self.attention_predictor(
+                head_input
+            )
 
-        O_mag_flat = self.O_mag_head(head_input)
-        O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
-        O_mag_logits = O_mag_logits.to(dtype)
-        O_mag_logits = tap(O_mag_logits, "O_mag_logits", self.enable_taps)
+            O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
+            O_mag_logits = O_mag_logits.to(dtype)
+            O_mag_logits = tap(O_mag_logits, "O_mag_logits", self.enable_taps)
 
-        O_sign_flat = self.O_sign_head(head_input)
-        O_sign_logits = O_sign_flat.view(B, self.dag_depth, self.total_nodes)
-        O_sign_logits = O_sign_logits.to(dtype)
-        O_sign_logits = tap(O_sign_logits, "O_sign_logits", self.enable_taps)
+            O_sign_logits = O_sign_flat.view(B, self.dag_depth, self.total_nodes)
+            O_sign_logits = O_sign_logits.to(dtype)
+            O_sign_logits = tap(O_sign_logits, "O_sign_logits", self.enable_taps)
+
+            G_logits = tap(G_logits, "G_logits", self.enable_taps)
+
+        else:
+            # Original prediction method with normalization stack
+            # Apply input normalization (gated behind flag)
+            # Massive LayerNorm stack to normalize
+            # The comment to the right is the number of steps to grok for ops: mul, add
+            # all seed 33232323
+            if not self.use_dense_features:
+                head_input = self.input_norm(head_input)  # inf, inf
+            head_input = self.extra_norm1(head_input)  # inf, 75
+            head_input = self.extra_norm2(head_input)  # 1119, 51
+            head_input = self.extra_norm3(head_input)  # 649, 52
+            head_input = self.extra_norm4(head_input)  # 157, 46
+            head_input = self.extra_norm5(head_input)  # 108, 50
+            head_input = self.extra_norm6(head_input)  # 216, 46
+            head_input = self.extra_norm7(head_input)  # 108, 50
+            head_input = self.extra_norm8(head_input)  # 216, 46
+            head_input = self.extra_norm9(head_input)  # 108, 50
+            head_input = self.extra_norm10(head_input)  # 216, 46
+
+            O_mag_flat = self.O_mag_head(head_input)
+            O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
+            O_mag_logits = O_mag_logits.to(dtype)
+            O_mag_logits = tap(O_mag_logits, "O_mag_logits", self.enable_taps)
+
+            O_sign_flat = self.O_sign_head(head_input)
+            O_sign_logits = O_sign_flat.view(B, self.dag_depth, self.total_nodes)
+            O_sign_logits = O_sign_logits.to(dtype)
+            O_sign_logits = tap(O_sign_logits, "O_sign_logits", self.enable_taps)
+
+            G_logits = self.G_head(head_input)
+            G_logits = tap(G_logits, "G_logits", self.enable_taps)
+
+            out_logits = self.output_selector_head(head_input).to(dtype)
 
         O_mask = self.O_mask.to(dtype).to(device)
         if (
@@ -232,9 +552,6 @@ class DAGLayer(ExtendedTorchModule):
         O = tap(O, "O_selector", self.enable_taps)
 
         eps = 1e-5
-        G_logits = self.G_head(head_input)
-        G_logits = tap(G_logits, "G_logits", self.enable_taps)
-
         G = torch.sigmoid(G_logits).to(dtype)
         G = eps + (1.0 - 2.0 * eps) * G
         G = tap(G, "G_gate", self.enable_taps)
@@ -251,9 +568,6 @@ class DAGLayer(ExtendedTorchModule):
             G = (G > 0.5).to(G.dtype)
             O = torch.round(O).clamp(-1.0, 1.0)
 
-        # Output selector logits
-        out_logits = self.output_selector_head(head_input).to(dtype)
-
         return O, G, out_logits
 
     def _compute_simple_domain_mixed_result(
@@ -268,6 +582,61 @@ class DAGLayer(ExtendedTorchModule):
         log_mag = torch.log(torch.clamp(working_mag, min=self._mag_min))
         mixed = log_mag * (1.0 - G_step) + signed_values * G_step
         return torch.sum(O_step * mixed, dim=-1, keepdim=True)
+
+    def _compute_aggregates(
+        self,
+        working_mag: torch.Tensor,
+        working_sign: torch.Tensor,
+        O_step: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Aggregate linear/log terms for complex domain mixing."""
+        signed_values = working_sign * working_mag
+        log_mag = torch.log(torch.clamp(working_mag, min=self._mag_min))
+
+        R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)
+        R_log = torch.sum(O_step * log_mag, dim=-1, keepdim=True)
+
+        return R_lin, R_log
+
+    def _compute_new_sign(
+        self,
+        R_lin: torch.Tensor,
+        working_sign: torch.Tensor,
+        O_step: torch.Tensor,
+        G_step: torch.Tensor,
+    ) -> torch.Tensor:
+        """Mix signs in linear and log domains with bounded outputs."""
+
+        # We extract the linear sign based on result of the operation
+        linear_sign = torch.tanh(R_lin)
+
+        # Map working_sign to angles for smooth sign
+        w = torch.abs(O_step)
+        neg_frac = 0.5 * (1.0 - working_sign)  # 1 for −1, 0 for +1, fractional if soft
+        m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+
+        # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
+        log_sign = torch.cos(math.pi * m)
+        s = G_step * linear_sign + (1.0 - G_step) * log_sign
+
+        return s
+
+    def _compute_new_magnitude(
+        self,
+        R_lin: torch.Tensor,
+        R_log: torch.Tensor,
+        G_step: torch.Tensor,
+    ) -> torch.Tensor:
+        """Mix magnitudes in log space with bounded gate leverage."""
+        l_lin = torch.log(torch.clamp(torch.abs(R_lin), min=self._mag_min))
+        l_log = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
+        delta = l_lin - l_log
+        delta = tap(delta, "delta", self.enable_taps)
+        m_log = l_log + G_step * delta
+        m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
+        # This should be clamped to not be too large
+        V_mag = torch.exp(m_log)
+        return V_mag
 
     def soft_floor(self, x: torch.Tensor, min: float, t: float = 1.0) -> torch.Tensor:
         beta = 1.0 / t
@@ -378,42 +747,73 @@ class DAGLayer(ExtendedTorchModule):
             O_step = O[:, step, :]
             G_step = G[:, step].unsqueeze(-1)
 
-            # Use simple domain mixing approach from working version
-            R_mixed = self._compute_simple_domain_mixed_result(
-                working_mag, working_sign, O_step, G_step
-            )
-            R_mixed = tap(R_mixed, "R_mixed", self.enable_taps)
+            if self.use_simple_domain_mixing:
+                # Use simple domain mixing approach from working version
+                R_mixed = self._compute_simple_domain_mixed_result(
+                    working_mag, working_sign, O_step, G_step
+                )
+                R_mixed = tap(R_mixed, "R_mixed", self.enable_taps)
 
-            # Debug: save for compatibility
-            self._debug_R_lin.append(R_mixed.clone())
-            self._debug_R_log.append(R_mixed.clone())
+                # Debug: save for compatibility
+                self._debug_R_lin.append(R_mixed.clone())
+                self._debug_R_log.append(R_mixed.clone())
 
-            if self._is_nan("R_mixed", R_mixed) and self.training:
-                pdb.set_trace()
+                if self._is_nan("R_mixed", R_mixed) and self.training:
+                    pdb.set_trace()
 
-            # For simple mixing, use R_mixed for both sign and magnitude computation
-            # Simple sign computation with sharp tanh
-            linear_sign = torch.tanh(R_mixed / 1e-4)
+                # For simple mixing, use R_mixed for both sign and magnitude computation
+                # Simple sign computation with sharp tanh
+                linear_sign = torch.tanh(R_mixed / 1e-4)
 
-            # Use complex sign computation with cos trick from the original domain mixing
-            w = torch.abs(O_step)
-            neg_frac = 0.5 * (
-                1.0 - working_sign
-            )  # 1 for −1, 0 for +1, fractional if soft
-            m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+                if self.use_complex_sign:
+                    # Use complex sign computation with cos trick from the original domain mixing
+                    w = torch.abs(O_step)
+                    neg_frac = 0.5 * (
+                        1.0 - working_sign
+                    )  # 1 for −1, 0 for +1, fractional if soft
+                    m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+                    # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
+                    log_sign = torch.cos(math.pi * m)
+                else:
+                    # Original simple sign computation
+                    sign_weights = (working_sign * torch.abs(O_step)) * 2.0 + 1.0
+                    log_sign = torch.tanh(
+                        torch.prod(sign_weights, dim=-1, keepdim=True) / 1e-4
+                    )
 
-            # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
-            log_sign = torch.cos(math.pi * m)
+                V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
 
-            V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
+                # Simple magnitude computation
+                linear_mag = torch.clamp(torch.abs(R_mixed), max=self._mag_max)
+                if self.use_soft_clamping:
+                    R_mixed_clamped = self.soft_clamp(
+                        R_mixed, min=-self._log_lim, max=self._log_lim
+                    )
+                else:
+                    R_mixed_clamped = torch.clamp(
+                        R_mixed, min=-self._log_lim, max=self._log_lim
+                    )
+                log_mag_result = torch.exp(R_mixed_clamped)
+                V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
+            else:
+                # Original complex domain mixing
+                R_lin, R_log = self._compute_aggregates(
+                    working_mag, working_sign, O_step
+                )
+                R_lin = tap(R_lin, "R_lin", self.enable_taps)
+                R_log = tap(R_log, "R_log", self.enable_taps)
 
-            # Simple magnitude computation
-            linear_mag = torch.clamp(torch.abs(R_mixed), max=self._mag_max)
-            R_mixed_clamped = torch.clamp(
-                R_mixed, min=-self._log_lim, max=self._log_lim
-            )
-            log_mag_result = torch.exp(R_mixed_clamped)
-            V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
+                # Debug: save intermediate computation results
+                self._debug_R_lin.append(R_lin.clone())
+                self._debug_R_log.append(R_log.clone())
+
+                if self._is_nan("R_lin", R_lin) and self.training:
+                    pdb.set_trace()
+                if self._is_nan("R_log", R_log) and self.training:
+                    pdb.set_trace()
+
+                V_sign_new = self._compute_new_sign(R_lin, working_sign, O_step, G_step)
+                V_mag_new = self._compute_new_magnitude(R_lin, R_log, G_step)
 
             # Debug logging for troubleshooting
             if (

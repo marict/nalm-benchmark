@@ -1,0 +1,141 @@
+{
+  "range_config": {
+    "name": "large_positive",
+    "interpolation_range": "[10.0,20.0]",
+    "extrapolation_range": "[20.0,40.0]"
+  },
+  "base_config": {
+    "layer_type": "DAG",
+    "operation": "div",
+    "learning_rate": 0.01,
+    "batch_size": 512,
+    "clip_grad_norm": 0.01,
+    "input_size": 2,
+    "max_iterations": 2000,
+    "no_cuda": true,
+    "log_interval": 200,
+    "no_open_browser": true
+  },
+  "total_seeds": 10,
+  "completed": 10,
+  "results": [
+    {
+      "seed": 221,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 131.7972106934,
+      "duration": 150.11013889312744
+    },
+    {
+      "seed": 223,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0577156246,
+      "duration": 146.95282888412476
+    },
+    {
+      "seed": 345,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 18311970.0,
+      "duration": 133.68439078330994
+    },
+    {
+      "seed": 567,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": false,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.8361894488,
+      "duration": 9.08798098564148
+    },
+    {
+      "seed": 1234,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0577156246,
+      "duration": 134.33052110671997
+    },
+    {
+      "seed": 1337,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 1110,
+      "final_loss": 0.0,
+      "duration": 77.96475005149841
+    },
+    {
+      "seed": 3141,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0577156246,
+      "duration": 125.94984412193298
+    },
+    {
+      "seed": 4242,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0577156246,
+      "duration": 123.73595762252808
+    },
+    {
+      "seed": 6789,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 18300724.0,
+      "duration": 123.75056195259094
+    },
+    {
+      "seed": 7890,
+      "range_config": "large_positive",
+      "interpolation_range": "[10.0,20.0]",
+      "extrapolation_range": "[20.0,40.0]",
+      "success": true,
+      "grokked": true,
+      "grok_step": 1196,
+      "final_loss": 0.0,
+      "duration": 79.77279090881348
+    }
+  ],
+  "summary": {
+    "grok_rate": 20.0,
+    "grokked_count": 2,
+    "grokked_seeds": [
+      1337,
+      7890
+    ]
+  }
+}

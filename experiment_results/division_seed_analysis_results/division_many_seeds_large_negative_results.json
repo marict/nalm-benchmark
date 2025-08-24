@@ -1,0 +1,138 @@
+{
+  "range_config": {
+    "name": "large_negative",
+    "interpolation_range": "[-20.0,-10.0]",
+    "extrapolation_range": "[-40.0,-20.0]"
+  },
+  "base_config": {
+    "layer_type": "DAG",
+    "operation": "div",
+    "learning_rate": 0.01,
+    "batch_size": 512,
+    "clip_grad_norm": 0.01,
+    "input_size": 2,
+    "max_iterations": 2000,
+    "no_cuda": true,
+    "log_interval": 200,
+    "no_open_browser": true
+  },
+  "total_seeds": 10,
+  "completed": 10,
+  "results": [
+    {
+      "seed": 221,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0857442319,
+      "duration": 144.2753300666809
+    },
+    {
+      "seed": 223,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0857442319,
+      "duration": 148.7241177558899
+    },
+    {
+      "seed": 345,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0857442319,
+      "duration": 135.2921929359436
+    },
+    {
+      "seed": 567,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": false,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.3866164684,
+      "duration": 8.906644105911255
+    },
+    {
+      "seed": 1234,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0857442319,
+      "duration": 133.9408938884735
+    },
+    {
+      "seed": 1337,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0857442319,
+      "duration": 126.82924103736877
+    },
+    {
+      "seed": 3141,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0857442319,
+      "duration": 124.84405612945557
+    },
+    {
+      "seed": 4242,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0857442319,
+      "duration": 126.26743078231812
+    },
+    {
+      "seed": 6789,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.8738204241,
+      "duration": 123.88118577003479
+    },
+    {
+      "seed": 7890,
+      "range_config": "large_negative",
+      "interpolation_range": "[-20.0,-10.0]",
+      "extrapolation_range": "[-40.0,-20.0]",
+      "success": true,
+      "grokked": false,
+      "grok_step": null,
+      "final_loss": 0.0857442319,
+      "duration": 118.54910373687744
+    }
+  ],
+  "summary": {
+    "grok_rate": 0.0,
+    "grokked_count": 0,
+    "grokked_seeds": []
+  }
+}

@@ -14,10 +14,11 @@ import torch
 # Enable anomaly detection for debugging gradient issues
 torch.autograd.set_detect_anomaly(True, check_nan=True)
 
+from debug_utils import tap_context
+
 import misc.utils as utils
 import stable_nalu
 import stable_nalu.functional.regualizer as Regualizer
-from debug_utils import tap_context
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
