@@ -7,12 +7,7 @@ import torch
 import torch.nn as nn
 
 
-# Simple tap function for debugging
-def tap(tensor, name, enabled=True):
-    """Simple tensor debugging function."""
-    if enabled:
-        print(f"{name}: {tensor.shape} | {tensor.dtype}")
-    return tensor
+from debug_utils import tap
 
 
 from ..abstract import ExtendedTorchModule
@@ -181,11 +176,11 @@ class DAGLayer(ExtendedTorchModule):
         div_biased_init_O_sign: bool = False,
         div_biased_init_O_mag_all_inputs: bool = False,
         mixed_sign_init: bool = False,
-        alternating_sign_init: bool = True,
         use_attention_prediction: bool = False,
-        use_dense_features: bool = True,
-        extended_mul_features: bool = False,
+        alternating_sign_init: bool = True,
+        use_dense_features: bool = False,
         use_complex_sign: bool = True,
+        extended_mul_features: bool = False,
         _enable_debug_logging: bool = False,
         _enable_taps: bool = False,
         _do_not_predict_weights: bool = False,
