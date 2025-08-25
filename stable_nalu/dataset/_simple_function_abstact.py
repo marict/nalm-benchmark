@@ -283,7 +283,7 @@ class SimpleFunctionDatasetFork(torch.utils.data.Dataset):
         output_scalar = self._operation(*subsets)[:, np.newaxis]
 
         # Filter out samples with extreme target values (especially for division)
-        max_target = 100.0  # Reasonable upper bound for targets
+        max_target = 100000.0  # Reasonable upper bound for targets
         if self._max_result_magnitude is not None:
             max_target = self._max_result_magnitude
 

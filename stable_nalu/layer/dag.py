@@ -6,9 +6,7 @@ import pdb
 import torch
 import torch.nn as nn
 
-
 from debug_utils import tap
-
 
 from ..abstract import ExtendedTorchModule
 
@@ -187,7 +185,7 @@ class DAGLayer(ExtendedTorchModule):
         use_dense_features: bool = False,
         extended_mul_features: bool = False,
         _enable_debug_logging: bool = False,
-        _enable_taps: bool = True,
+        _enable_taps: bool = False,
         _do_not_predict_weights: bool = False,
         freeze_g_log: bool = False,
         freeze_g_linear: bool = False,
@@ -285,13 +283,13 @@ class DAGLayer(ExtendedTorchModule):
         nn.init.xavier_uniform_(self.O_sign_head.weight)
         nn.init.xavier_uniform_(self.G_head.weight)
         nn.init.xavier_uniform_(self.output_selector_head.weight)
-        
+
         # Initialize all biases to zero
         nn.init.zeros_(self.O_mag_head.bias)
         nn.init.zeros_(self.O_sign_head.bias)
         nn.init.zeros_(self.G_head.bias)
         nn.init.zeros_(self.output_selector_head.bias)
-        
+
         # Apply frozen selector initialization if enabled
         with torch.no_grad():
             if self.freeze_O_div:
@@ -299,19 +297,22 @@ class DAGLayer(ExtendedTorchModule):
                 for step in range(self.dag_depth):
                     step_start = step * self.total_nodes
                     if self.num_initial_nodes >= 2:
-                        self.O_sign_head.bias[step_start] = 1.0      # First input: positive
-                        self.O_sign_head.bias[step_start + 1] = -1.0  # Second input: negative
+                        self.O_sign_head.bias[step_start] = 1.0  # First input: positive
+                        self.O_sign_head.bias[step_start + 1] = (
+                            -1.0
+                        )  # Second input: negative
                         # Remaining positions stay at 0
-            
+
             elif self.freeze_O_mul:
                 # Initialize bias for multiplication pattern [1, 1, 0, ...]
                 for step in range(self.dag_depth):
                     step_start = step * self.total_nodes
                     if self.num_initial_nodes >= 2:
-                        self.O_sign_head.bias[step_start] = 1.0      # First input: positive
-                        self.O_sign_head.bias[step_start + 1] = 1.0  # Second input: positive
+                        self.O_sign_head.bias[step_start] = 1.0  # First input: positive
+                        self.O_sign_head.bias[step_start + 1] = (
+                            1.0  # Second input: positive
+                        )
                         # Remaining positions stay at 0
-
 
     def extract_dense_features(self, input: torch.Tensor) -> torch.Tensor:
         """Extract dense features from each input element.
@@ -424,18 +425,19 @@ class DAGLayer(ExtendedTorchModule):
             # Massive LayerNorm stack to normalize
             # The comment to the right is the number of steps to grok for ops: mul, add
             # all seed 33232323
-            if not self.use_dense_features:
-                head_input = self.input_norm(head_input)  # inf, inf
-            head_input = self.extra_norm1(head_input)  # inf, 75
-            head_input = self.extra_norm2(head_input)  # 1119, 51
-            head_input = self.extra_norm3(head_input)  # 649, 52
-            head_input = self.extra_norm4(head_input)  # 157, 46
-            head_input = self.extra_norm5(head_input)  # 108, 50
-            head_input = self.extra_norm6(head_input)  # 216, 46
-            head_input = self.extra_norm7(head_input)  # 108, 50
-            head_input = self.extra_norm8(head_input)  # 216, 46
-            head_input = self.extra_norm9(head_input)  # 108, 50
-            head_input = self.extra_norm10(head_input)  # 216, 46
+            # NOTE: Disabling to see what happens
+            # if not self.use_dense_features:
+            # head_input = self.input_norm(head_input)  # inf, inf
+            # head_input = self.extra_norm1(head_input)  # inf, 75
+            # head_input = self.extra_norm2(head_input)  # 1119, 51
+            # head_input = self.extra_norm3(head_input)  # 649, 52
+            # head_input = self.extra_norm4(head_input)  # 157, 46
+            # head_input = self.extra_norm5(head_input)  # 108, 50
+            # head_input = self.extra_norm6(head_input)  # 216, 46
+            # head_input = self.extra_norm7(head_input)  # 108, 50
+            # head_input = self.extra_norm8(head_input)  # 216, 46
+            # head_input = self.extra_norm9(head_input)  # 108, 50
+            # head_input = self.extra_norm10(head_input)  # 216, 46
 
             O_mag_flat = self.O_mag_head(head_input)
             O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
@@ -467,29 +469,29 @@ class DAGLayer(ExtendedTorchModule):
         O_mag = O_mag * O_mask
         O_sign = O_sign * O_mask
         O = O_sign * O_mag
-        
+
         # Apply selector freezing if enabled
         if self.freeze_O_div:
             # Freeze to division pattern: [1, -1, 0, 0, 0, ...] for all steps
             pattern = torch.zeros(self.total_nodes, device=O.device, dtype=O.dtype)
             if self.num_initial_nodes >= 2:
-                pattern[0] = 1.0   # First input: positive
+                pattern[0] = 1.0  # First input: positive
                 pattern[1] = -1.0  # Second input: negative
                 # Remaining positions stay at 0
-            
+
             # Apply pattern to all DAG steps and all batch elements
             O = pattern.unsqueeze(0).unsqueeze(0).expand(B, self.dag_depth, -1)
         elif self.freeze_O_mul:
             # Freeze to multiplication pattern: [1, 1, 0, 0, 0, ...] for all steps
             pattern = torch.zeros(self.total_nodes, device=O.device, dtype=O.dtype)
             if self.num_initial_nodes >= 2:
-                pattern[0] = 1.0   # First input: positive
-                pattern[1] = 1.0   # Second input: positive
+                pattern[0] = 1.0  # First input: positive
+                pattern[1] = 1.0  # Second input: positive
                 # Remaining positions stay at 0
-            
+
             # Apply pattern to all DAG steps and all batch elements
             O = pattern.unsqueeze(0).unsqueeze(0).expand(B, self.dag_depth, -1)
-        
+
         O = tap(O, "O_selector", self.enable_taps)
 
         eps = 1e-5

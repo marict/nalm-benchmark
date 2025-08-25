@@ -10,15 +10,15 @@ from decimal import Decimal
 import numpy as np
 import runpod_service.wandb_setup as wandb
 import torch
+from tqdm import tqdm
 
 # Enable anomaly detection for debugging gradient issues
 torch.autograd.set_detect_anomaly(True, check_nan=True)
 
-from debug_utils import tap_context
-
 import misc.utils as utils
 import stable_nalu
 import stable_nalu.functional.regualizer as Regualizer
+from debug_utils import tap_context
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
@@ -662,6 +662,110 @@ parser.add_argument(
     help="Freeze O selectors for multiplication pattern [1, 1, 0, ...] (DAG layer only)",
 )
 
+
+# Compute bins for |x|
+def compute_bins(x, num_bins: int = 5):
+    x_abs = x.abs().min(dim=1).values
+    # Use quantiles to ensure roughly equal sample counts per bin
+    quantiles = torch.quantile(x_abs, torch.linspace(0, 1, num_bins + 1))
+    bin_edges = quantiles
+
+    # Assign samples to bins based on quantiles
+    bin_indices = torch.zeros_like(x_abs, dtype=torch.long)
+    for i in range(num_bins):
+        if i == 0:
+            mask = x_abs <= bin_edges[i + 1]
+        elif i == num_bins - 1:
+            mask = x_abs > bin_edges[i]
+        else:
+            mask = (x_abs > bin_edges[i]) & (x_abs <= bin_edges[i + 1])
+        bin_indices[mask] = i
+
+    print("=" * 60)
+    print("📊 BINNED MSE ANALYSIS SETUP")
+    print("=" * 60)
+    print(f"📈 Input tensor shape: {x.shape}")
+    print(f"🔢 Number of bins: {num_bins}")
+    print(f"📏 min|x| range: [{x_abs.min().item():.6f}, {x_abs.max().item():.6f}]")
+    print()
+    print("📋 Bin boundaries (quantile-based):")
+    for i in range(num_bins):
+        if i == 0:
+            print(f"   Bin {i}: min|x| ≤ {bin_edges[i + 1]:.6f}")
+        elif i == num_bins - 1:
+            print(f"   Bin {i}: min|x| > {bin_edges[i]:.6f}")
+        else:
+            print(f"   Bin {i}: {bin_edges[i]:.6f} < min|x| ≤ {bin_edges[i + 1]:.6f}")
+    print()
+    print("🎯 Sample distribution per bin:")
+    for i in range(num_bins):
+        count = (bin_indices == i).sum()
+        print(f"   Bin {i}: {count} samples")
+    print("=" * 60)
+
+    return bin_indices
+
+
+def compute_binned_mse(data, bin_indices, name: str) -> dict:
+    """
+    Compute MSE for different log-spaced bins of |x| values.
+
+    Args:
+        data: Tuple of (x, t) where x is input tensor and t is target tensor
+        num_bins: Number of log-spaced bins to create
+
+    Returns:
+        Dictionary with bin counts and MSE per bin
+    """
+    x, t = data
+
+    # Compute MSE per bin
+    total_bins = bin_indices.max() + 1
+    result = {}
+    total_mse = 0
+    total_samples = 0
+    for bin_idx in range(total_bins):
+        bin_samples = bin_indices == bin_idx
+        count = bin_samples.sum()
+        if count > 0:
+            bin_data = (x[bin_samples], t[bin_samples])
+            bin_mse = test_model(bin_data)
+            bin_mse_scalar = float(bin_mse.detach().cpu().item())
+            result[f"mse/{name}/bin_{bin_idx}"] = bin_mse_scalar
+            total_mse += bin_mse_scalar * count
+            total_samples += count
+        else:
+            result[f"mse/{name}/bin_{bin_idx}"] = float("nan")
+
+    # Compute weighted average MSE across all bins
+    interpolation_error = (
+        total_mse / total_samples if total_samples > 0 else float("nan")
+    )
+
+    return result, interpolation_error
+
+
+def test_model(data):
+    with torch.no_grad(), model.no_internal_logging(), model.no_random():
+        model.eval()
+        x, t = data
+        err = criterion(model(x), t)
+        model.train()
+        return err
+
+
+# Set seed
+def seed_torch(seed):
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+
 args = parser.parse_args()
 
 # Initialize wandb with note
@@ -757,34 +861,11 @@ print(f"  - freeze_O_div: {args.freeze_O_div}")
 print(f"  - freeze_O_mul: {args.freeze_O_mul}")
 print(f"  -")
 
-
-def get_npu_Wr_init_writer_value():
-    if args.npu_Wr_init == "xavier-uniform":
-        return "xu"
-    elif args.npu_Wr_init == "xavier-uniform-constrained":
-        return "xuc"
-    else:
-        raise ValueError(f"Invalid arg ({args.npu_Wr_init}) given for npu_Wr_init")
-
-
 summary_writer = stable_nalu.writer.DummySummaryWriter()
 
 # Set threads
 if "LSB_DJOB_NUMPROC" in os.environ:
     torch.set_num_threads(int(os.environ["LSB_DJOB_NUMPROC"]))
-
-
-# Set seed
-def seed_torch(seed):
-    random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-
 
 seed_torch(args.seed)
 
@@ -805,12 +886,14 @@ dataset = stable_nalu.dataset.SimpleFunctionStaticDataset(
 )
 print(f"  -")
 print(f"  - dataset: {dataset.print_operation()}")
+
 # Interpolation and extrapolation seeds are from random.org
 dataset_train = iter(
     dataset.fork(sample_range=args.interpolation_range).dataloader(
         batch_size=args.batch_size
     )
 )
+print(f"Initialized dataset_train iterator")
 dataset_valid_interpolation_data = next(
     iter(
         dataset.fork(sample_range=args.interpolation_range, seed=43953907).dataloader(
@@ -818,6 +901,7 @@ dataset_valid_interpolation_data = next(
         )
     )
 )
+print(f"Initialized dataset_valid_interpolation_data")
 dataset_test_extrapolation_data = next(
     iter(
         dataset.fork(sample_range=args.extrapolation_range, seed=8689336).dataloader(
@@ -825,6 +909,7 @@ dataset_test_extrapolation_data = next(
         )
     )
 )
+print(f"Initialized dataset_test_extrapolation_data")
 
 # setup model
 model = stable_nalu.network.SingleLayerNetwork(
@@ -854,8 +939,8 @@ model = stable_nalu.network.SingleLayerNetwork(
     dag_depth=args.num_subsets + 1,
     # dag_depth=1,
     # DAG-specific frozen selector arguments
-    freeze_O_div=getattr(args, 'freeze_O_div', False),
-    freeze_O_mul=getattr(args, 'freeze_O_mul', False),
+    freeze_O_div=getattr(args, "freeze_O_div", False),
+    freeze_O_mul=getattr(args, "freeze_O_mul", False),
 )
 model.reset_parameters()
 if args.cuda:
@@ -880,97 +965,6 @@ if args.lr_cosine:
     )
 else:
     scheduler = NoOpScheduler(optimizer)
-
-
-# Compute bins for |x|
-def compute_bins(x, num_bins: int = 5):
-    x_abs = x.abs().min(dim=1).values
-    # Use quantiles to ensure roughly equal sample counts per bin
-    quantiles = torch.quantile(x_abs, torch.linspace(0, 1, num_bins + 1))
-    bin_edges = quantiles
-
-    # Assign samples to bins based on quantiles
-    bin_indices = torch.zeros_like(x_abs, dtype=torch.long)
-    for i in range(num_bins):
-        if i == 0:
-            mask = x_abs <= bin_edges[i + 1]
-        elif i == num_bins - 1:
-            mask = x_abs > bin_edges[i]
-        else:
-            mask = (x_abs > bin_edges[i]) & (x_abs <= bin_edges[i + 1])
-        bin_indices[mask] = i
-
-    print("=" * 60)
-    print("📊 BINNED MSE ANALYSIS SETUP")
-    print("=" * 60)
-    print(f"📈 Input tensor shape: {x.shape}")
-    print(f"🔢 Number of bins: {num_bins}")
-    print(f"📏 min|x| range: [{x_abs.min().item():.6f}, {x_abs.max().item():.6f}]")
-    print()
-    print("📋 Bin boundaries (quantile-based):")
-    for i in range(num_bins):
-        if i == 0:
-            print(f"   Bin {i}: min|x| ≤ {bin_edges[i + 1]:.6f}")
-        elif i == num_bins - 1:
-            print(f"   Bin {i}: min|x| > {bin_edges[i]:.6f}")
-        else:
-            print(f"   Bin {i}: {bin_edges[i]:.6f} < min|x| ≤ {bin_edges[i + 1]:.6f}")
-    print()
-    print("🎯 Sample distribution per bin:")
-    for i in range(num_bins):
-        count = (bin_indices == i).sum()
-        print(f"   Bin {i}: {count} samples")
-    print("=" * 60)
-
-    return bin_indices
-
-
-def compute_binned_mse(data, bin_indices, name: str) -> dict:
-    """
-    Compute MSE for different log-spaced bins of |x| values.
-
-    Args:
-        data: Tuple of (x, t) where x is input tensor and t is target tensor
-        num_bins: Number of log-spaced bins to create
-
-    Returns:
-        Dictionary with bin counts and MSE per bin
-    """
-    x, t = data
-
-    # Compute MSE per bin
-    total_bins = bin_indices.max() + 1
-    result = {}
-    total_mse = 0
-    total_samples = 0
-    for bin_idx in range(total_bins):
-        bin_samples = bin_indices == bin_idx
-        count = bin_samples.sum()
-        if count > 0:
-            bin_data = (x[bin_samples], t[bin_samples])
-            bin_mse = test_model(bin_data)
-            bin_mse_scalar = float(bin_mse.detach().cpu().item())
-            result[f"mse/{name}/bin_{bin_idx}"] = bin_mse_scalar
-            total_mse += bin_mse_scalar * count
-            total_samples += count
-        else:
-            result[f"mse/{name}/bin_{bin_idx}"] = float("nan")
-
-    # Compute weighted average MSE across all bins
-    interpolation_error = (
-        total_mse / total_samples if total_samples > 0 else float("nan")
-    )
-
-    return result, interpolation_error
-
-
-def test_model(data):
-    with torch.no_grad(), model.no_internal_logging(), model.no_random():
-        model.eval()
-        x, t = data
-        err = criterion(model(x), t)
-        model.train()
-        return err
 
 
 # Train model
@@ -1022,9 +1016,14 @@ patience_counter = 0
 early_stop = False
 
 bin_indices = compute_bins(dataset_valid_interpolation_data[0])
-for epoch_i, (x_train, t_train) in zip(
-    range(resume_epoch, args.max_iterations + 1), dataset_train
-):
+progress_bar = tqdm(
+    zip(range(resume_epoch, args.max_iterations + 1), dataset_train),
+    total=args.max_iterations - resume_epoch + 1,
+    desc=f"{args.operation.upper()}-seed{args.seed}",
+    leave=False,
+    disable=args.no_open_browser,  # Disable tqdm when running headless tests
+)
+for epoch_i, (x_train, t_train) in progress_bar:
     tap_context.set_epoch_i(epoch_i)
     summary_writer.set_iteration(epoch_i)
 
@@ -1143,6 +1142,16 @@ for epoch_i, (x_train, t_train) in zip(
                 extrapolation_error.detach().cpu().item(),
             )
         )
+
+        # Update tqdm progress bar with current loss info
+        if not args.no_open_browser:  # Only update when tqdm is enabled
+            progress_bar.set_postfix(
+                {
+                    "train": f"{loss_train_criterion.detach().cpu().item():.6f}",
+                    "inter": f"{interpolation_error:.6f}",
+                    "extra": f"{extrapolation_error.detach().cpu().item():.6f}",
+                }
+            )
 
         # Print extrapolation example after running through model to get internal state
         if dag is not None:
@@ -1282,6 +1291,10 @@ print(f"  - loss_valid_extra: {loss_valid_extra}")
 print()
 # Skip printing model params for now
 # utils.print_model_params(model)
+
+# Close progress bar after training loop ends
+if not args.no_open_browser:
+    progress_bar.close()
 
 # Play completion sound on macOS
 import os
