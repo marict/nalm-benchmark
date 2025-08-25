@@ -1230,9 +1230,7 @@ for epoch_i, (x_train, t_train) in progress_bar:
             else:
                 log_dict["gradients/clipping_ratio"] = 1.0
         except:
-            import pdb
-
-            pdb.set_trace()
+            print(f"Gradient explosion detected at epoch {epoch_i}, stopping training")
             raise
 
         if args.clip_grad_value != None:

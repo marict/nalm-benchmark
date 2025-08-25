@@ -117,3 +117,6 @@ venv.bak/
 csvs/
 .DS_Store
 wandb/
+
+
+experiment_results

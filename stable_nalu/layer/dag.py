@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import pdb
 
 import torch
 import torch.nn as nn
@@ -273,8 +272,8 @@ class DAGLayer(ExtendedTorchModule):
 
         self.reset_parameters()
 
-        self._mag_min = 1e-11
-        self._mag_max = 1e11
+        self._mag_min = 1e-6
+        self._mag_max = 1e6
         self._log_lim = math.log(self._mag_max) - 1.0
 
     def reset_parameters(self) -> None:
