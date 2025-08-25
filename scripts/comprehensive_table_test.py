@@ -25,58 +25,32 @@ TEST_RANGES = [
 
 OPERATIONS = ["mul", "add", "sub", "div"]
 
-def modify_dag_defaults(freeze_div=False, freeze_mul=False):
-    """Modify DAG defaults by editing the file directly."""
-    dag_file = "/Users/paul_curry/ai2/nalm-benchmark/stable_nalu/layer/dag.py"
-    
-    with open(dag_file, 'r') as f:
-        content = f.read()
-    
-    if freeze_div and not freeze_mul:
-        content = content.replace(
-            "freeze_O_selectors_div: bool = False,",
-            "freeze_O_selectors_div: bool = True,"
-        ).replace(
-            "freeze_O_selector_mul: bool = True,", 
-            "freeze_O_selector_mul: bool = False,"
-        )
-    elif freeze_mul and not freeze_div:
-        content = content.replace(
-            "freeze_O_selectors_div: bool = True,",
-            "freeze_O_selectors_div: bool = False,"
-        ).replace(
-            "freeze_O_selector_mul: bool = False,",
-            "freeze_O_selector_mul: bool = True,"
-        )
-    
-    with open(dag_file, 'w') as f:
-        f.write(content)
-
 def run_single_test(operation, seed, interp_range, extrap_range):
     """Run a single test and return result."""
     
-    # Set up frozen selectors based on operation
-    if operation in ["mul", "add"]:
-        modify_dag_defaults(freeze_div=False, freeze_mul=True)
-        frozen_config = "freeze_O_selector_mul=True"
-    elif operation in ["sub", "div"]:
-        modify_dag_defaults(freeze_div=True, freeze_mul=False)
-        frozen_config = "freeze_O_selectors_div=True"
-    
+    # Base command with updated hyperparameters
     cmd = [
         "python", "experiments/single_layer_benchmark.py",
         "--layer-type", "DAG", "--no-open-browser",
         "--operation", operation, "--seed", str(seed),
         "--input-size", "2", "--batch-size", "512", 
-        "--max-iterations", "3000", "--learning-rate", "1e-2",
+        "--max-iterations", "5000", "--learning-rate", "1e-3",
         "--interpolation-range", str(interp_range),
         "--extrapolation-range", str(extrap_range),
-        "--no-cuda", "--log-interval", "500"
+        "--no-cuda", "--log-interval", "100", "--clip-grad-norm", "0.01"
     ]
+    
+    # Add frozen selector arguments based on operation
+    if operation in ["mul", "add"]:
+        cmd.append("--freeze-O-mul")
+        frozen_config = "freeze_O_mul=True"
+    elif operation in ["sub", "div"]:
+        cmd.append("--freeze-O-div")
+        frozen_config = "freeze_O_div=True"
     
     try:
         start_time = time.time()
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         duration = time.time() - start_time
         
         output_lines = result.stdout.split('\n') if result.stdout else []
@@ -128,7 +102,7 @@ def run_single_test(operation, seed, interp_range, extrap_range):
             "frozen_config": frozen_config,
             "grokked": False,
             "grok_step": None,
-            "duration": 180,
+            "duration": 120,
             "final_inter_loss": float("inf"),
         }
 

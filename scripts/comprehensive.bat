@@ -1,0 +1,11 @@
+python experiments/single_layer_benchmark.py \
+    --layer-type DAG --seed 122 --no-open-browser  \
+    --operation div --freeze-O-div  \
+    --input-size 2 \
+    --batch-size 128 \
+    --max-iterations 30000 \
+    --learning-rate 1e-3 \
+    --interpolation-range "[1.1,1.2]" \
+    --extrapolation-range "[1.2,6]" \
+    --no-cuda \
+    --log-interval 100 --clip-grad-norm 0.01

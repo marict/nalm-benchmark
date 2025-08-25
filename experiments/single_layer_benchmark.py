@@ -648,6 +648,20 @@ parser.add_argument(
     help="Division regularizer epsilon for x/(x^2 + eps^2) term. If None, no division regularizer is applied.",
 )
 
+parser.add_argument(
+    "--freeze-O-div",
+    action="store_true",
+    default=False,
+    help="Freeze O selectors for division pattern [1, -1, 0, ...] (DAG layer only)",
+)
+
+parser.add_argument(
+    "--freeze-O-mul",
+    action="store_true",
+    default=False,
+    help="Freeze O selectors for multiplication pattern [1, 1, 0, ...] (DAG layer only)",
+)
+
 args = parser.parse_args()
 
 # Initialize wandb with note
@@ -738,6 +752,9 @@ print(f"  - reinit_epoch_interval: {args.reinit_epoch_interval}")
 print(f"  - reinit_max_stored_losses: {args.reinit_max_stored_losses}")
 print(f"  - reinit_loss_thr: {args.reinit_loss_thr}")
 print(f"  - num_bins: {args.num_bins}")
+print(f"  -")
+print(f"  - freeze_O_div: {args.freeze_O_div}")
+print(f"  - freeze_O_mul: {args.freeze_O_mul}")
 print(f"  -")
 
 
@@ -836,6 +853,9 @@ model = stable_nalu.network.SingleLayerNetwork(
     realnpu_reg_type=args.realnpu_reg_type,
     dag_depth=args.num_subsets + 1,
     # dag_depth=1,
+    # DAG-specific frozen selector arguments
+    freeze_O_div=getattr(args, 'freeze_O_div', False),
+    freeze_O_mul=getattr(args, 'freeze_O_mul', False),
 )
 model.reset_parameters()
 if args.cuda:

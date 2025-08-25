@@ -1,0 +1,173 @@
+{
+  "timestamp": 1756084487,
+  "config": {
+    "seeds": [
+      122,
+      223,
+      42,
+      777,
+      1337
+    ],
+    "ranges": [
+      [
+        [
+          -2,
+          2
+        ],
+        [
+          [
+            -6,
+            -2
+          ],
+          [
+            2,
+            6
+          ]
+        ],
+        "standard"
+      ],
+      [
+        [
+          -2,
+          -1
+        ],
+        [
+          -6,
+          -2
+        ],
+        "neg_moderate"
+      ],
+      [
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          6
+        ],
+        "pos_moderate"
+      ],
+      [
+        [
+          -1.2,
+          -1.1
+        ],
+        [
+          -6.1,
+          -1.2
+        ],
+        "neg_narrow"
+      ],
+      [
+        [
+          0.1,
+          0.2
+        ],
+        [
+          0.2,
+          2
+        ],
+        "pos_small"
+      ],
+      [
+        [
+          -0.2,
+          -0.1
+        ],
+        [
+          -2,
+          -0.2
+        ],
+        "neg_small"
+      ],
+      [
+        [
+          1.1,
+          1.2
+        ],
+        [
+          1.2,
+          6
+        ],
+        "pos_narrow"
+      ],
+      [
+        [
+          -20,
+          -10
+        ],
+        [
+          -40,
+          -20
+        ],
+        "neg_large"
+      ],
+      [
+        [
+          10,
+          20
+        ],
+        [
+          20,
+          40
+        ],
+        "pos_large"
+      ]
+    ],
+    "operations": [
+      "mul",
+      "add",
+      "sub",
+      "div"
+    ]
+  },
+  "results": [
+    {
+      "operation": "mul",
+      "seed": 122,
+      "interp_range": [
+        -2,
+        2
+      ],
+      "extrap_range": [
+        [
+          -6,
+          -2
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "frozen_config": "freeze_O_mul=True",
+      "grokked": true,
+      "grok_step": 136,
+      "duration": 19.181403160095215,
+      "final_inter_loss": Infinity
+    },
+    {
+      "operation": "mul",
+      "seed": 223,
+      "interp_range": [
+        -2,
+        2
+      ],
+      "extrap_range": [
+        [
+          -6,
+          -2
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "frozen_config": "freeze_O_mul=True",
+      "grokked": true,
+      "grok_step": 99,
+      "duration": 16.780599117279053,
+      "final_inter_loss": Infinity
+    }
+  ]
+}

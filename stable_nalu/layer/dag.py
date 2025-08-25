@@ -35,6 +35,20 @@ python experiments/single_layer_benchmark.py \
   - Sub: Does not grok (groks on other seeds)
   - Div: Groks at 888 steps
 
+
+  Grokk with frozen add/mul
+  python experiments/single_layer_benchmark.py \         nalm
+    --layer-type DAG --seed 122 --no-open-browser  \
+    --operation add  \
+    --input-size 2 \
+    --batch-size 512 \
+    --max-iterations 30000 \
+    --learning-rate 1e-2 \
+    --interpolation-range "[1.1,1.2]" \
+    --extrapolation-range "[1.2,6]" \
+    --no-cuda \
+    --log-interval 100 --clip-grad-norm 0.01
+
 """
 
 
@@ -177,8 +191,8 @@ class DAGLayer(ExtendedTorchModule):
         _do_not_predict_weights: bool = False,
         freeze_g_log: bool = False,
         freeze_g_linear: bool = False,
-        freeze_O_selectors_div: bool = False,
-        freeze_O_selector_mul: bool = True,
+        freeze_O_div: bool = False,
+        freeze_O_mul: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -204,8 +218,8 @@ class DAGLayer(ExtendedTorchModule):
         self._do_not_predict_weights = bool(_do_not_predict_weights)
         self.use_dense_features = bool(use_dense_features)
         self.extended_mul_features = bool(extended_mul_features)
-        self.freeze_O_selectors_div = bool(freeze_O_selectors_div)
-        self.freeze_O_selector_mul = bool(freeze_O_selector_mul)
+        self.freeze_O_div = bool(freeze_O_div)
+        self.freeze_O_mul = bool(freeze_O_mul)
 
         # Calculate input size for heads based on dense features
         if self.use_dense_features:
@@ -280,7 +294,7 @@ class DAGLayer(ExtendedTorchModule):
         
         # Apply frozen selector initialization if enabled
         with torch.no_grad():
-            if self.freeze_O_selectors_div:
+            if self.freeze_O_div:
                 # Initialize bias for division pattern [1, -1, 0, ...]
                 for step in range(self.dag_depth):
                     step_start = step * self.total_nodes
@@ -289,7 +303,7 @@ class DAGLayer(ExtendedTorchModule):
                         self.O_sign_head.bias[step_start + 1] = -1.0  # Second input: negative
                         # Remaining positions stay at 0
             
-            elif self.freeze_O_selector_mul:
+            elif self.freeze_O_mul:
                 # Initialize bias for multiplication pattern [1, 1, 0, ...]
                 for step in range(self.dag_depth):
                     step_start = step * self.total_nodes
@@ -455,7 +469,7 @@ class DAGLayer(ExtendedTorchModule):
         O = O_sign * O_mag
         
         # Apply selector freezing if enabled
-        if self.freeze_O_selectors_div:
+        if self.freeze_O_div:
             # Freeze to division pattern: [1, -1, 0, 0, 0, ...] for all steps
             pattern = torch.zeros(self.total_nodes, device=O.device, dtype=O.dtype)
             if self.num_initial_nodes >= 2:
@@ -465,7 +479,7 @@ class DAGLayer(ExtendedTorchModule):
             
             # Apply pattern to all DAG steps and all batch elements
             O = pattern.unsqueeze(0).unsqueeze(0).expand(B, self.dag_depth, -1)
-        elif self.freeze_O_selector_mul:
+        elif self.freeze_O_mul:
             # Freeze to multiplication pattern: [1, 1, 0, 0, 0, ...] for all steps
             pattern = torch.zeros(self.total_nodes, device=O.device, dtype=O.dtype)
             if self.num_initial_nodes >= 2:
