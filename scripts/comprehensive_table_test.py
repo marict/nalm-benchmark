@@ -31,15 +31,15 @@ except ImportError:
 # Test configuration
 TEST_SEEDS = [122, 223, 42, 777, 1337]
 TEST_RANGES = [
-    ([-2, 2], [[-6, -2], [2, 6]], "standard"),
-    ([-2, -1], [-6, -2], "neg_moderate"),
-    ([1, 2], [2, 6], "pos_moderate"),
-    ([-1.2, -1.1], [-6.1, -1.2], "neg_narrow"),
-    ([0.1, 0.2], [0.2, 2], "pos_small"),
-    ([-0.2, -0.1], [-2, -0.2], "neg_small"),
-    ([1.1, 1.2], [1.2, 6], "pos_narrow"),
-    ([-20, -10], [-40, -20], "neg_large"),
-    ([10, 20], [20, 40], "pos_large"),
+    ([-2, 2], [[-6, -2], [2, 6]], "sym"),  # symmetric around 0
+    ([-2, -1], [-6, -2], "neg"),  # negative moderate
+    ([1, 2], [2, 6], "pos"),  # positive moderate
+    ([-1.2, -1.1], [-6.1, -1.2], "n10"),  # negative narrow (around -1.1)
+    ([0.1, 0.2], [0.2, 2], "p01"),  # positive small (0.1-0.2)
+    ([-0.2, -0.1], [-2, -0.2], "n01"),  # negative small (-0.2 to -0.1)
+    ([1.1, 1.2], [1.2, 6], "p11"),  # positive narrow (around 1.1)
+    ([-20, -10], [-40, -20], "n20"),  # negative large (-20 to -10)
+    ([10, 20], [20, 40], "p20"),  # positive large (10-20)
 ]
 
 OPERATIONS = ["mul", "add", "sub", "div"]
@@ -68,7 +68,15 @@ def get_experiment_key(seed, operation, range_name):
     return f"{seed}_{operation}_{range_name}"
 
 
-def run_single_test(operation, seed, interp_range, extrap_range, show_progress=False):
+def run_single_test(
+    operation,
+    seed,
+    interp_range,
+    extrap_range,
+    show_progress=False,
+    max_iterations=3000,
+    restart_iter=None,
+):
     """Run a single test and return result."""
 
     # Base command with updated hyperparameters
@@ -87,7 +95,7 @@ def run_single_test(operation, seed, interp_range, extrap_range, show_progress=F
         "--batch-size",
         "512",
         "--max-iterations",
-        "5000",
+        str(max_iterations),
         "--learning-rate",
         "1e-3",
         "--interpolation-range",
@@ -100,6 +108,10 @@ def run_single_test(operation, seed, interp_range, extrap_range, show_progress=F
         "--clip-grad-norm",
         "0.01",
     ]
+
+    # Add restart argument if specified
+    if restart_iter is not None:
+        cmd.extend(["--restart-iter", str(restart_iter)])
 
     # Add frozen selector arguments based on operation
     if operation in ["mul", "add"]:
@@ -248,6 +260,24 @@ def main():
         choices=["mul", "add", "sub", "div"],
         help="Run experiments for only the specified operation across all seeds and ranges",
     )
+    parser.add_argument(
+        "--num-seeds",
+        type=int,
+        default=10,
+        help="Number of seeds to use, starting from 0 (default: 10, uses seeds 0-9)",
+    )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=3000,
+        help="Maximum training iterations per experiment (default: 3000)",
+    )
+    parser.add_argument(
+        "--restart-iter",
+        type=int,
+        default=None,
+        help="Restart training with re-initialized model if no early stop by this iteration",
+    )
     args = parser.parse_args()
 
     # Setup progress tracking
@@ -269,11 +299,14 @@ def main():
     # Filter operations if --op is specified
     operations_to_run = [args.op] if args.op else OPERATIONS
 
+    # Generate seeds based on --num-seeds argument
+    seeds_to_run = list(range(args.num_seeds))
+
     print(f"Operations: {operations_to_run}")
-    print(f"Seeds: {TEST_SEEDS}")
+    print(f"Seeds: {seeds_to_run}")
     print(f"Ranges: {len(TEST_RANGES)} different interpolation/extrapolation pairs")
 
-    total_experiments = len(TEST_SEEDS) * len(operations_to_run) * len(TEST_RANGES)
+    total_experiments = len(seeds_to_run) * len(operations_to_run) * len(TEST_RANGES)
     completed_count = len(progress_data.get("completed", {}))
 
     if args.max_experiments:
@@ -291,7 +324,7 @@ def main():
     completed = completed_count
 
     # Reordered loops: seed -> operation -> range
-    for seed in TEST_SEEDS:
+    for seed in seeds_to_run:
         print(f"\n🌱 Testing seed {seed}:")
 
         for operation in operations_to_run:
@@ -322,7 +355,13 @@ def main():
                 # Run the experiment
                 print(f"[{range_name[:3]}]", end="", flush=True)
                 result = run_single_test(
-                    operation, seed, interp_range, extrap_range, args.show_progress
+                    operation,
+                    seed,
+                    interp_range,
+                    extrap_range,
+                    args.show_progress,
+                    args.max_iterations,
+                    args.restart_iter,
                 )
                 results.append(result)
                 completed += 1
@@ -481,7 +520,7 @@ def main():
             {
                 "timestamp": timestamp,
                 "config": {
-                    "seeds": TEST_SEEDS,
+                    "seeds": seeds_to_run,
                     "ranges": [(ir, er, name) for ir, er, name in TEST_RANGES],
                     "operations": OPERATIONS,
                 },
@@ -513,9 +552,9 @@ def main():
     print(f"Overall success rate: {overall_success_rate:.1f}%")
 
     # Clean up progress file on successful completion (only if we completed ALL experiments, not just limited ones)
-    if not args.op and len(progress_data.get("completed", {})) >= len(TEST_SEEDS) * len(
-        OPERATIONS
-    ) * len(TEST_RANGES):
+    if not args.op and len(progress_data.get("completed", {})) >= len(
+        seeds_to_run
+    ) * len(OPERATIONS) * len(TEST_RANGES):
         try:
             progress_file.unlink(missing_ok=True)
             print(f"Progress file cleaned up: {progress_file}")

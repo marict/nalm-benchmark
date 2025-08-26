@@ -231,6 +231,13 @@ parser.add_argument(
     help="Specify the max number of iterations to use",
 )
 parser.add_argument(
+    "--restart-iter",
+    action="store",
+    default=None,
+    type=int,
+    help="Restart training with re-initialized model if no early stop by this iteration",
+)
+parser.add_argument(
     "--batch-size",
     action="store",
     default=128,
@@ -1014,6 +1021,7 @@ if args.reinit:
 
 patience_counter = 0
 early_stop = False
+model_restarted = False
 
 bin_indices = compute_bins(dataset_valid_interpolation_data[0])
 progress_bar = tqdm(
@@ -1051,6 +1059,36 @@ for epoch_i, (x_train, t_train) in progress_bar:
             early_stop = True
     else:
         patience_counter = 0
+
+    # Check for model restart if --restart-iter is specified
+    if (
+        args.restart_iter is not None
+        and epoch_i >= args.restart_iter
+        and not early_stop
+        and not model_restarted
+    ):
+        print(f"Restarting model at iteration {epoch_i} (no early stop achieved)")
+        model.reset_parameters()
+        # Re-initialize optimizer with same settings as original
+        if args.optimizer == "adam":
+            optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+        elif args.optimizer == "sgd":
+            optimizer = torch.optim.SGD(
+                model.parameters(),
+                lr=args.learning_rate,
+                momentum=args.momentum,
+                nesterov=args.nesterov,
+            )
+        # Re-initialize scheduler
+        if args.lr_cosine:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=args.max_iterations, eta_min=args.lr_min
+            )
+        else:
+            scheduler = NoOpScheduler(optimizer)
+        patience_counter = 0  # Reset patience counter
+        model_restarted = True
+        log_dict["model_restarted"] = 1
 
     # forward
     y_train = model(x_train)
