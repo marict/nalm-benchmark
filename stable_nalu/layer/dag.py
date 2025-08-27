@@ -180,7 +180,7 @@ class DAGLayer(ExtendedTorchModule):
         dag_depth: int,
         writer: str = None,
         name: str | None = None,
-        use_simple_domain_mixing: bool = True,
+        use_simple_domain_mixing: bool = False,
         use_attention_prediction: bool = False,
         use_dense_features: bool = False,
         extended_mul_features: bool = False,
@@ -528,11 +528,6 @@ class DAGLayer(ExtendedTorchModule):
     ) -> torch.Tensor:
         """Simple domain mixing from the working version."""
 
-        # signed_values = working_sign * working_mag
-        # R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)
-        # R_log = torch.sum(O_step * torch.log(torch.clamp(working_mag, min=self._mag_min)), dim=-1, keepdim=True
-        # )
-
         signed_values = working_sign * working_mag
         log_mag = torch.log(torch.clamp(working_mag, min=self._mag_min))
         mixed = log_mag * (1.0 - G_step) + signed_values * G_step
@@ -697,6 +692,7 @@ class DAGLayer(ExtendedTorchModule):
         # Save initial state
         self._debug_working_mag.append(working_mag.clone())
         self._debug_working_sign.append(working_sign.clone())
+        sign_eps = 1e-4
 
         for step in range(self.dag_depth):
             O_step = O[:, step, :]
@@ -718,7 +714,7 @@ class DAGLayer(ExtendedTorchModule):
 
                 # For simple mixing, use R_mixed for both sign and magnitude computation
                 # Simple sign computation with sharp tanh
-                linear_sign = torch.tanh(R_mixed / 1e-4)
+                linear_sign = torch.tanh(R_mixed / sign_eps)
 
                 # Use complex sign computation with cos trick from the original domain mixing
                 w = torch.abs(O_step)
@@ -739,24 +735,25 @@ class DAGLayer(ExtendedTorchModule):
                 log_mag_result = torch.exp(R_mixed_clamped)
                 V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
             else:
-                # Original complex domain mixing
-                R_lin, R_log = self._compute_aggregates(
-                    working_mag, working_sign, O_step
+                signed_values = working_sign * working_mag
+                R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)
+                R_log = torch.sum(O_step * torch.log(torch.clamp(working_mag, min=self._mag_min)), dim=-1, keepdim=True
                 )
-                R_lin = tap(R_lin, "R_lin", self.enable_taps)
-                R_log = tap(R_log, "R_log", self.enable_taps)
+                linear_sign = torch.tanh(R_lin / sign_eps)
 
-                # Debug: save intermediate computation results
-                self._debug_R_lin.append(R_lin.clone())
-                self._debug_R_log.append(R_log.clone())
+                # Still encode log_sign via cos
+                w = torch.abs(O_step)
+                neg_frac = 0.5 * (1.0 - working_sign)
+                m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+                log_sign = torch.cos(math.pi * m)
 
-                if self._is_nan("R_lin", R_lin) and self.training:
-                    pdb.set_trace()
-                if self._is_nan("R_log", R_log) and self.training:
-                    pdb.set_trace()
+                V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
 
-                V_sign_new = self._compute_new_sign(R_lin, working_sign, O_step, G_step)
-                V_mag_new = self._compute_new_magnitude(R_lin, R_log, G_step)
+                linear_mag = torch.clamp(torch.abs(R_lin), max=self._mag_max)
+                R_log_clamped = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
+                log_mag_result = torch.exp(R_log_clamped)
+
+                V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
 
             # Debug logging for troubleshooting
             if (
