@@ -74,7 +74,7 @@ def run_single_test(
     interp_range,
     extrap_range,
     show_progress=False,
-    max_iterations=3000,
+    max_iterations=5000,
     restart_iter=None,
 ):
     """Run a single test and return result."""
@@ -86,6 +86,8 @@ def run_single_test(
         "--layer-type",
         "DAG",
         "--no-open-browser",
+        "--dag-depth",
+        "1",
         "--operation",
         operation,
         "--seed",

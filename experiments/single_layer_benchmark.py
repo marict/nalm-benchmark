@@ -12,9 +12,6 @@ import runpod_service.wandb_setup as wandb
 import torch
 from tqdm import tqdm
 
-# Enable anomaly detection for debugging gradient issues
-torch.autograd.set_detect_anomaly(True, check_nan=True)
-
 import misc.utils as utils
 import stable_nalu
 import stable_nalu.functional.regualizer as Regualizer
@@ -669,6 +666,21 @@ parser.add_argument(
     help="Freeze O selectors for multiplication pattern [1, 1, 0, ...] (DAG layer only)",
 )
 
+parser.add_argument(
+    "--no-selector",
+    action="store_true",
+    default=False,
+    help="Skip final output selector and use the last intermediate node as output (DAG layer only)",
+)
+
+parser.add_argument(
+    "--dag-depth",
+    action="store",
+    default=3,
+    type=int,
+    help="Specify the DAG depth (number of intermediate computation steps, default: 3)",
+)
+
 
 # Compute bins for |x|
 def compute_bins(x, num_bins: int = 5):
@@ -775,6 +787,15 @@ def seed_torch(seed):
 
 args = parser.parse_args()
 
+# Enable no_selector by default if dag_depth is 1
+# Check if --no-selector was explicitly provided in command line args
+import sys
+
+no_selector_explicitly_provided = "--no-selector" in sys.argv
+if args.dag_depth == 1 and not no_selector_explicitly_provided:
+    print(f"INFO: Automatically enabling --no-selector since dag_depth=1")
+    args.no_selector = True
+
 # Initialize wandb with note
 note = args.note if args.note else get_default_note()
 operation = args.operation
@@ -866,6 +887,8 @@ print(f"  - num_bins: {args.num_bins}")
 print(f"  -")
 print(f"  - freeze_O_div: {args.freeze_O_div}")
 print(f"  - freeze_O_mul: {args.freeze_O_mul}")
+print(f"  - no_selector: {args.no_selector}")
+print(f"  - dag_depth: {args.dag_depth}")
 print(f"  -")
 
 summary_writer = stable_nalu.writer.DummySummaryWriter()
@@ -943,11 +966,11 @@ model = stable_nalu.network.SingleLayerNetwork(
     npu_Wr_init=args.npu_Wr_init,
     nru_div_mode=args.nru_div_mode,
     realnpu_reg_type=args.realnpu_reg_type,
-    dag_depth=args.num_subsets + 1,
-    # dag_depth=1,
+    dag_depth=args.dag_depth,
     # DAG-specific frozen selector arguments
     freeze_O_div=getattr(args, "freeze_O_div", False),
     freeze_O_mul=getattr(args, "freeze_O_mul", False),
+    no_selector=getattr(args, "no_selector", False),
 )
 model.reset_parameters()
 if args.cuda:
@@ -1028,8 +1051,10 @@ progress_bar = tqdm(
     zip(range(resume_epoch, args.max_iterations + 1), dataset_train),
     total=args.max_iterations - resume_epoch + 1,
     desc=f"{args.operation.upper()}-seed{args.seed}",
-    leave=False,
+    leave=True,  # Changed to True so progress bar doesn't overwrite output
     disable=args.no_open_browser,  # Disable tqdm when running headless tests
+    position=0,  # Ensure it stays at the bottom
+    dynamic_ncols=True,  # Adjust to terminal width
 )
 for epoch_i, (x_train, t_train) in progress_bar:
     tap_context.set_epoch_i(epoch_i)
@@ -1068,7 +1093,28 @@ for epoch_i, (x_train, t_train) in progress_bar:
         and not model_restarted
     ):
         print(f"Restarting model at iteration {epoch_i} (no early stop achieved)")
+
+        # Use a different seed for restart to avoid identical initialization
+        restart_seed = args.seed + 1000  # Add offset to original seed
+        print(f"Using restart seed: {restart_seed}")
+        seed_torch(restart_seed)
+
+        # Show some parameters before reset for debugging
+        dag_layer = next((m for m in model.modules() if hasattr(m, "O_mag_head")), None)
+        if dag_layer:
+            param_before = dag_layer.O_mag_head.weight[0, 0].item()
+            print(f"Sample parameter before reset: {param_before:.6f}")
+
+        print("Calling model.reset_parameters()...")
         model.reset_parameters()
+        print("Model parameters reset completed")
+
+        # Show parameters after reset
+        if dag_layer:
+            param_after = dag_layer.O_mag_head.weight[0, 0].item()
+            print(f"Sample parameter after reset: {param_after:.6f}")
+            if abs(param_before - param_after) < 1e-6:
+                print("⚠️  WARNING: Parameter values appear unchanged after reset!")
         # Re-initialize optimizer with same settings as original
         if args.optimizer == "adam":
             optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
@@ -1172,7 +1218,7 @@ for epoch_i, (x_train, t_train) in progress_bar:
         log_dict["mse/extra"] = float(extrapolation_error.detach().cpu().item())
 
         print(
-            "train %d: %.10f, inter: %.10f, extra: %.10f"
+            "\ntrain %d: %.10f, inter: %.10f, extra: %.10f"
             % (
                 epoch_i,
                 loss_train_criterion.detach().cpu().item(),

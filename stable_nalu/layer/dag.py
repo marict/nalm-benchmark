@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import pdb
 
 import torch
 import torch.nn as nn
@@ -184,12 +185,13 @@ class DAGLayer(ExtendedTorchModule):
         use_dense_features: bool = False,
         extended_mul_features: bool = False,
         _enable_debug_logging: bool = False,
-        _enable_taps: bool = False,
+        _enable_taps: bool = True,
         _do_not_predict_weights: bool = False,
         freeze_g_log: bool = False,
         freeze_g_linear: bool = False,
         freeze_O_div: bool = False,
         freeze_O_mul: bool = False,
+        no_selector: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -217,6 +219,7 @@ class DAGLayer(ExtendedTorchModule):
         self.extended_mul_features = bool(extended_mul_features)
         self.freeze_O_div = bool(freeze_O_div)
         self.freeze_O_mul = bool(freeze_O_mul)
+        self.no_selector = bool(no_selector)
 
         # Calculate input size for heads based on dense features
         if self.use_dense_features:
@@ -272,7 +275,7 @@ class DAGLayer(ExtendedTorchModule):
 
         self.reset_parameters()
 
-        self._mag_min = 1e-6
+        self._mag_min = 1e-11
         self._mag_max = 1e6
         self._log_lim = math.log(self._mag_max) - 1.0
 
@@ -426,17 +429,17 @@ class DAGLayer(ExtendedTorchModule):
             # all seed 33232323
             # NOTE: Disabling to see what happens
             # if not self.use_dense_features:
-            # head_input = self.input_norm(head_input)  # inf, inf
-            # head_input = self.extra_norm1(head_input)  # inf, 75
-            # head_input = self.extra_norm2(head_input)  # 1119, 51
-            # head_input = self.extra_norm3(head_input)  # 649, 52
-            # head_input = self.extra_norm4(head_input)  # 157, 46
-            # head_input = self.extra_norm5(head_input)  # 108, 50
-            # head_input = self.extra_norm6(head_input)  # 216, 46
-            # head_input = self.extra_norm7(head_input)  # 108, 50
-            # head_input = self.extra_norm8(head_input)  # 216, 46
-            # head_input = self.extra_norm9(head_input)  # 108, 50
-            # head_input = self.extra_norm10(head_input)  # 216, 46
+            head_input = self.input_norm(head_input)  # inf, inf
+            head_input = self.extra_norm1(head_input)  # inf, 75
+            head_input = self.extra_norm2(head_input)  # 1119, 51
+            head_input = self.extra_norm3(head_input)  # 649, 52
+            head_input = self.extra_norm4(head_input)  # 157, 46
+            head_input = self.extra_norm5(head_input)  # 108, 50
+            head_input = self.extra_norm6(head_input)  # 216, 46
+            head_input = self.extra_norm7(head_input)  # 108, 50
+            head_input = self.extra_norm8(head_input)  # 216, 46
+            head_input = self.extra_norm9(head_input)  # 108, 50
+            head_input = self.extra_norm10(head_input)  # 216, 46
 
             O_mag_flat = self.O_mag_head(head_input)
             O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
@@ -451,7 +454,11 @@ class DAGLayer(ExtendedTorchModule):
             G_logits = self.G_head(head_input)
             G_logits = tap(G_logits, "G_logits", self.enable_taps)
 
-            out_logits = self.output_selector_head(head_input).to(dtype)
+            if not self.no_selector:
+                out_logits = self.output_selector_head(head_input).to(dtype)
+            else:
+                # Create dummy out_logits for logging when no selector is used
+                out_logits = torch.zeros(B, self.dag_depth, device=device, dtype=dtype)
 
         O_mask = self.O_mask.to(dtype).to(device)
         if (
@@ -520,6 +527,12 @@ class DAGLayer(ExtendedTorchModule):
         G_step: torch.Tensor,
     ) -> torch.Tensor:
         """Simple domain mixing from the working version."""
+
+        # signed_values = working_sign * working_mag
+        # R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)
+        # R_log = torch.sum(O_step * torch.log(torch.clamp(working_mag, min=self._mag_min)), dim=-1, keepdim=True
+        # )
+
         signed_values = working_sign * working_mag
         log_mag = torch.log(torch.clamp(working_mag, min=self._mag_min))
         mixed = log_mag * (1.0 - G_step) + signed_values * G_step
@@ -825,12 +838,18 @@ class DAGLayer(ExtendedTorchModule):
         self._is_nan("out_logits (output selector)", out_logits)
 
         value_vec_inter = (working_sign * working_mag)[:, self.num_initial_nodes :]
-        if not self.training:
-            idx = torch.argmax(out_logits, dim=-1, keepdim=True)
-            final_value = value_vec_inter.gather(-1, idx).squeeze(-1)
+
+        if self.no_selector:
+            # Skip selector and use the last intermediate node as output
+            final_value = value_vec_inter[:, -1]  # Last intermediate value
         else:
-            probs = torch.softmax(out_logits, dim=-1)
-            final_value = torch.sum(probs * value_vec_inter, dim=-1)
+            # Use the normal output selector logic
+            if not self.training:
+                idx = torch.argmax(out_logits, dim=-1, keepdim=True)
+                final_value = value_vec_inter.gather(-1, idx).squeeze(-1)
+            else:
+                probs = torch.softmax(out_logits, dim=-1)
+                final_value = torch.sum(probs * value_vec_inter, dim=-1)
 
         # Always save the current state for logging (captures clamping during eval)
         # Separate tracking for training vs eval states
