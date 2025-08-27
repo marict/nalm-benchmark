@@ -737,7 +737,10 @@ class DAGLayer(ExtendedTorchModule):
             else:
                 signed_values = working_sign * working_mag
                 R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)
-                R_log = torch.sum(O_step * torch.log(torch.clamp(working_mag, min=self._mag_min)), dim=-1, keepdim=True
+                R_log = torch.sum(
+                    O_step * torch.log(torch.clamp(working_mag, min=self._mag_min)),
+                    dim=-1,
+                    keepdim=True,
                 )
                 linear_sign = torch.tanh(R_lin / sign_eps)
 
@@ -750,7 +753,9 @@ class DAGLayer(ExtendedTorchModule):
                 V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
 
                 linear_mag = torch.clamp(torch.abs(R_lin), max=self._mag_max)
-                R_log_clamped = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
+                R_log_clamped = self.soft_clamp(
+                    R_log, min=-self._log_lim, max=self._log_lim
+                )
                 log_mag_result = torch.exp(R_log_clamped)
 
                 V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result

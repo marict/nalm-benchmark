@@ -42,7 +42,7 @@ TEST_RANGES = [
     ([10, 20], [20, 40], "p20"),  # positive large (10-20)
 ]
 
-OPERATIONS = ["mul", "add", "sub", "div"]
+OPERATIONS = ["div", "sub", "mul", "add"]
 
 
 def load_progress(progress_file):
@@ -74,7 +74,7 @@ def run_single_test(
     interp_range,
     extrap_range,
     show_progress=False,
-    max_iterations=5000,
+    max_iterations=2000,
     restart_iter=None,
 ):
     """Run a single test and return result."""
@@ -186,7 +186,7 @@ def run_single_test(
                         pass
                     break
 
-        # Check final loss if no early stopping and no NaN error
+        # Check final loss for NaN errors only (don't consider low loss as success without early stopping)
         if not grokked and not nan_error:
             for line in reversed(output_lines):
                 if "- loss_valid_inter:" in line:
@@ -194,8 +194,8 @@ def run_single_test(
                         final_inter_loss = float(line.split(":")[1].strip())
                         if math.isnan(final_inter_loss):
                             nan_error = True
-                        elif final_inter_loss < 1e-8:
-                            grokked = True
+                        # Removed: elif final_inter_loss < 1e-8: grokked = True
+                        # Only early stopping counts as success to avoid overfitting
                         break
                     except:
                         continue
