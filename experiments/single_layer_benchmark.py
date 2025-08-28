@@ -681,6 +681,13 @@ parser.add_argument(
     help="Specify the DAG depth (number of intermediate computation steps, default: 3)",
 )
 
+parser.add_argument(
+    "--mix-mag-in-log",
+    action="store_true",
+    default=True,
+    help="Mix magnitudes in log space for gradient stability (DAG layer only)",
+)
+
 
 # Compute bins for |x|
 def compute_bins(x, num_bins: int = 5):
@@ -889,6 +896,7 @@ print(f"  - freeze_O_div: {args.freeze_O_div}")
 print(f"  - freeze_O_mul: {args.freeze_O_mul}")
 print(f"  - no_selector: {args.no_selector}")
 print(f"  - dag_depth: {args.dag_depth}")
+print(f"  - mix_mag_in_log: {args.mix_mag_in_log}")
 print(f"  -")
 
 summary_writer = stable_nalu.writer.DummySummaryWriter()
@@ -971,6 +979,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     freeze_O_div=getattr(args, "freeze_O_div", False),
     freeze_O_mul=getattr(args, "freeze_O_mul", False),
     no_selector=getattr(args, "no_selector", False),
+    mix_mag_in_log=getattr(args, "mix_mag_in_log", False),
 )
 model.reset_parameters()
 if args.cuda:

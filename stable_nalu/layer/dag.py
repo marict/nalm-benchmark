@@ -192,6 +192,7 @@ class DAGLayer(ExtendedTorchModule):
         freeze_O_div: bool = False,
         freeze_O_mul: bool = False,
         no_selector: bool = False,
+        mix_mag_in_log: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -220,6 +221,7 @@ class DAGLayer(ExtendedTorchModule):
         self.freeze_O_div = bool(freeze_O_div)
         self.freeze_O_mul = bool(freeze_O_mul)
         self.no_selector = bool(no_selector)
+        self.mix_mag_in_log = bool(mix_mag_in_log)
 
         # Calculate input size for heads based on dense features
         if self.use_dense_features:
@@ -672,13 +674,23 @@ class DAGLayer(ExtendedTorchModule):
 
                 V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
 
-                # Simple magnitude computation
-                linear_mag = torch.clamp(torch.abs(R_mixed), max=self._mag_max)
-                R_mixed_clamped = self.soft_clamp(
-                    R_mixed, min=-self._log_lim, max=self._log_lim
-                )
-                log_mag_result = torch.exp(R_mixed_clamped)
-                V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
+                # Magnitude computation
+                if self.mix_mag_in_log:
+                    # Mix magnitudes in log space for gradient stability
+                    linear_mag = torch.sqrt(R_mixed * R_mixed + 1e-8)  # smooth |.| to keep grads near 0
+                    l_lin = torch.log(torch.clamp(linear_mag, min=self._mag_min))
+                    l_log = self.soft_clamp(R_mixed, min=-self._log_lim, max=self._log_lim)
+                    m_log = l_log + G_step * (l_lin - l_log)  # convex blend in log space
+                    m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
+                    V_mag_new = torch.exp(m_log)
+                else:
+                    # Original magnitude computation
+                    linear_mag = torch.clamp(torch.abs(R_mixed), max=self._mag_max)
+                    R_mixed_clamped = self.soft_clamp(
+                        R_mixed, min=-self._log_lim, max=self._log_lim
+                    )
+                    log_mag_result = torch.exp(R_mixed_clamped)
+                    V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
             else:
                 signed_values = working_sign * working_mag
                 R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)
@@ -697,13 +709,23 @@ class DAGLayer(ExtendedTorchModule):
 
                 V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
 
-                linear_mag = torch.clamp(torch.abs(R_lin), max=self._mag_max)
-                R_log_clamped = self.soft_clamp(
-                    R_log, min=-self._log_lim, max=self._log_lim
-                )
-                log_mag_result = torch.exp(R_log_clamped)
-
-                V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
+                # Magnitude computation
+                if self.mix_mag_in_log:
+                    # Mix magnitudes in log space for gradient stability
+                    linear_mag = torch.sqrt(R_lin * R_lin + 1e-8)  # smooth |.| to keep grads near 0
+                    l_lin = torch.log(torch.clamp(linear_mag, min=self._mag_min))
+                    l_log = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
+                    m_log = l_log + G_step * (l_lin - l_log)  # convex blend in log space
+                    m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
+                    V_mag_new = torch.exp(m_log)
+                else:
+                    # Original magnitude computation
+                    linear_mag = torch.clamp(torch.abs(R_lin), max=self._mag_max)
+                    R_log_clamped = self.soft_clamp(
+                        R_log, min=-self._log_lim, max=self._log_lim
+                    )
+                    log_mag_result = torch.exp(R_log_clamped)
+                    V_mag_new = G_step * linear_mag + (1.0 - G_step) * log_mag_result
 
             # Debug logging for troubleshooting
             if (

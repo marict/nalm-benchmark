@@ -260,9 +260,11 @@ def main():
         help="Show training progress lines (train 0:, train 100:, etc.). Default is off for cleaner output.",
     )
     parser.add_argument(
-        "--op",
+        "--ops",
+        type=str,
+        nargs='+',
         choices=["mul", "add", "sub", "div"],
-        help="Run experiments for only the specified operation across all seeds and ranges",
+        help="Run experiments for only the specified operations (e.g., --ops div sub mul). If not specified, runs all operations.",
     )
     parser.add_argument(
         "--num-seeds",
@@ -313,8 +315,13 @@ def main():
     print("COMPREHENSIVE FROZEN SELECTOR TABLE GENERATION")
     print("=" * 70)
 
-    # Filter operations if --op is specified
-    operations_to_run = [args.op] if args.op else OPERATIONS
+    # Filter operations if --ops is specified
+    if args.ops:
+        operations_to_run = args.ops
+        print(f"Using specified operations: {args.ops}")
+    else:
+        operations_to_run = OPERATIONS
+        print(f"Using all operations: {OPERATIONS}")
 
     # Filter ranges if --ranges is specified
     if args.ranges:
@@ -586,7 +593,7 @@ def main():
     print(f"Overall success rate: {overall_success_rate:.1f}%")
 
     # Clean up progress file on successful completion (only if we completed ALL experiments, not just limited ones)
-    if not args.op and len(progress_data.get("completed", {})) >= len(
+    if not args.ops and len(progress_data.get("completed", {})) >= len(
         seeds_to_run
     ) * len(OPERATIONS) * len(TEST_RANGES):
         try:
