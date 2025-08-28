@@ -1096,18 +1096,26 @@ for epoch_i, (x_train, t_train) in progress_bar:
 
     # Check for model restart if --restart-iter is specified
     # Calculate next restart iteration: restart_iter * (restart_count + 1)
-    next_restart_iter = args.restart_iter * (restart_count + 1) if args.restart_iter is not None else None
-    
+    next_restart_iter = (
+        args.restart_iter * (restart_count + 1)
+        if args.restart_iter is not None
+        else None
+    )
+
     if (
         args.restart_iter is not None
         and epoch_i >= next_restart_iter
         and not early_stop
     ):
         restart_count += 1
-        print(f"Restarting model at iteration {epoch_i} (restart #{restart_count}, no early stop achieved)")
+        print(
+            f"Restarting model at iteration {epoch_i} (restart #{restart_count}, no early stop achieved)"
+        )
 
         # Use a different seed for each restart to avoid identical initialization
-        restart_seed = args.seed + 1000 + restart_count  # Different seed for each restart
+        restart_seed = (
+            args.seed + 1000 + restart_count
+        )  # Different seed for each restart
         print(f"Using restart seed: {restart_seed}")
         seed_torch(restart_seed)
 

@@ -110,7 +110,7 @@ def run_single_test(
         "100",
         "--clip-grad-norm",
         "0.01",
-        "--note", 
+        "--note",
         f"seed{seed}_{range_name}",
     ]
 
@@ -262,26 +262,26 @@ def main():
     parser.add_argument(
         "--ops",
         type=str,
-        nargs='+',
+        nargs="+",
         choices=["mul", "add", "sub", "div"],
         help="Run experiments for only the specified operations (e.g., --ops div sub mul). If not specified, runs all operations.",
     )
     parser.add_argument(
         "--num-seeds",
         type=int,
-        default=10,
-        help="Number of seeds to use, starting from 0 (default: 10, uses seeds 0-9)",
+        default=25,
+        help="Number of seeds to use, starting from 0 (default: 25, uses seeds 0-24)",
     )
     parser.add_argument(
         "--seeds",
         type=int,
-        nargs='+',
+        nargs="+",
         help="Specific seeds to use (e.g., --seeds 0 42 123). Takes precedence over --num-seeds.",
     )
     parser.add_argument(
         "--ranges",
         type=str,
-        nargs='+',
+        nargs="+",
         choices=["sym", "neg", "pos", "n10", "p01", "n01", "p11", "n20", "p20"],
         help="Specific ranges to test (e.g., --ranges n01 pos sym). If not specified, tests all ranges.",
     )
@@ -326,8 +326,8 @@ def main():
     # Filter ranges if --ranges is specified
     if args.ranges:
         ranges_to_run = [
-            (interp_range, extrap_range, range_name) 
-            for interp_range, extrap_range, range_name in TEST_RANGES 
+            (interp_range, extrap_range, range_name)
+            for interp_range, extrap_range, range_name in TEST_RANGES
             if range_name in args.ranges
         ]
         print(f"Using specified ranges: {args.ranges}")

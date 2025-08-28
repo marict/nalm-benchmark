@@ -677,10 +677,16 @@ class DAGLayer(ExtendedTorchModule):
                 # Magnitude computation
                 if self.mix_mag_in_log:
                     # Mix magnitudes in log space for gradient stability
-                    linear_mag = torch.sqrt(R_mixed * R_mixed + 1e-8)  # smooth |.| to keep grads near 0
+                    linear_mag = torch.sqrt(
+                        R_mixed * R_mixed + 1e-8
+                    )  # smooth |.| to keep grads near 0
                     l_lin = torch.log(torch.clamp(linear_mag, min=self._mag_min))
-                    l_log = self.soft_clamp(R_mixed, min=-self._log_lim, max=self._log_lim)
-                    m_log = l_log + G_step * (l_lin - l_log)  # convex blend in log space
+                    l_log = self.soft_clamp(
+                        R_mixed, min=-self._log_lim, max=self._log_lim
+                    )
+                    m_log = l_log + G_step * (
+                        l_lin - l_log
+                    )  # convex blend in log space
                     m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
                     V_mag_new = torch.exp(m_log)
                 else:
@@ -712,10 +718,16 @@ class DAGLayer(ExtendedTorchModule):
                 # Magnitude computation
                 if self.mix_mag_in_log:
                     # Mix magnitudes in log space for gradient stability
-                    linear_mag = torch.sqrt(R_lin * R_lin + 1e-8)  # smooth |.| to keep grads near 0
+                    linear_mag = torch.sqrt(
+                        R_lin * R_lin + 1e-8
+                    )  # smooth |.| to keep grads near 0
                     l_lin = torch.log(torch.clamp(linear_mag, min=self._mag_min))
-                    l_log = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
-                    m_log = l_log + G_step * (l_lin - l_log)  # convex blend in log space
+                    l_log = self.soft_clamp(
+                        R_log, min=-self._log_lim, max=self._log_lim
+                    )
+                    m_log = l_log + G_step * (
+                        l_lin - l_log
+                    )  # convex blend in log space
                     m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
                     V_mag_new = torch.exp(m_log)
                 else:
