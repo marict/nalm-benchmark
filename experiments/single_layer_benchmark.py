@@ -429,6 +429,12 @@ parser.add_argument(
     help=f"Force no CUDA (cuda usage is detected automatically as {torch.cuda.is_available()})",
 )
 parser.add_argument(
+    "--disable-early-stopping",
+    action="store_true",
+    default=False,
+    help="Disable early stopping and run for full iterations. Success determined post-hoc by checking if dual threshold (interpolation AND extrapolation) was ever met during training.",
+)
+parser.add_argument(
     "--name-prefix",
     action="store",
     default="simple_function_static",
@@ -1055,6 +1061,12 @@ patience_counter = 0
 early_stop = False
 restart_count = 0
 
+# Variables to track success criteria for paper-faithful evaluation
+min_interpolation_error = float('inf')
+min_extrapolation_error = float('inf')
+success_achieved = False
+success_at_step = None
+
 bin_indices = compute_bins(dataset_valid_interpolation_data[0])
 progress_bar = tqdm(
     zip(range(resume_epoch, args.max_iterations + 1), dataset_train),
@@ -1082,17 +1094,48 @@ for epoch_i, (x_train, t_train) in progress_bar:
 
     _es_thr = 1e-7
     PATIENCE = 100
-    if interpolation_error < _es_thr:
-        patience_counter += 1
-        if patience_counter >= PATIENCE:
-            extrapolation_error = test_model(dataset_test_extrapolation_data)
-            print(
-                f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
-            )
-            log_dict["early_stopped"] = 1
-            early_stop = True
+    
+    # Always track minimum errors for paper-faithful evaluation
+    min_interpolation_error = min(min_interpolation_error, interpolation_error)
+    
+    if not args.disable_early_stopping:
+        # Original early stopping logic with dual threshold check
+        if interpolation_error < _es_thr:
+            patience_counter += 1
+            if patience_counter >= PATIENCE:
+                # Check extrapolation error for dual threshold
+                extrapolation_error = test_model(dataset_test_extrapolation_data)
+                min_extrapolation_error = min(min_extrapolation_error, extrapolation_error.detach().cpu().item())
+                
+                # Dual threshold check: both inter AND extra must be below threshold
+                if extrapolation_error.detach().cpu().item() < _es_thr:
+                    print(
+                        f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
+                    )
+                    log_dict["early_stopped"] = 1
+                    early_stop = True
+                    success_achieved = True
+                    success_at_step = epoch_i
+                else:
+                    print(f"Inter threshold met but extra too high at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f}")
+                    patience_counter = 0  # Reset patience if extrapolation doesn't meet threshold
+        else:
+            patience_counter = 0
     else:
-        patience_counter = 0
+        # When early stopping is disabled, still track if we would have succeeded
+        # Check extrapolation error periodically to track minimum
+        if epoch_i % args.log_interval == 0 or interpolation_error < _es_thr:
+            extrapolation_error = test_model(dataset_test_extrapolation_data) 
+            min_extrapolation_error = min(min_extrapolation_error, extrapolation_error.detach().cpu().item())
+            
+            # Check if dual threshold is met (for tracking, not stopping)
+            if interpolation_error < _es_thr and extrapolation_error.detach().cpu().item() < _es_thr:
+                if not success_achieved:
+                    success_achieved = True
+                    success_at_step = epoch_i
+                    print(f"Dual threshold achieved at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f} (continuing training)")
+    
+    # Track the fact that both thresholds were achieved at some point
 
     # Check for model restart if --restart-iter is specified
     # Calculate next restart iteration: restart_iter * (restart_count + 1)
@@ -1230,6 +1273,15 @@ for epoch_i, (x_train, t_train) in progress_bar:
         log_dict["mean/G"] = float(dag._last_train_G.cpu().mean().item())
         o_l1_mean = float(dag._last_train_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
+        
+        # Log sparsity error only for dag_depth=1
+        if args.dag_depth == 1:
+            try:
+                sparsity_error = dag.calculate_sparsity_error(args.operation)
+                log_dict["sparsity/error"] = float(sparsity_error)
+            except (ValueError, RuntimeError) as e:
+                # Skip sparsity logging if calculation fails
+                pass
 
     commit = False
     if epoch_i % args.log_interval == 0 or early_stop:
@@ -1384,6 +1436,48 @@ loss_train_capped = test_model([x_train, t_train])
 print(f"finished:")
 if args.reinit:
     print(f"Reinitialized {reinit_counter} times")
+
+# Final success determination for paper-faithful evaluation
+if args.disable_early_stopping:
+    # Final check at the end of training for dual threshold success
+    final_inter_error = loss_valid_inter.detach().cpu().item()
+    final_extra_error = loss_valid_extra.detach().cpu().item()
+    min_interpolation_error = min(min_interpolation_error, final_inter_error)
+    min_extrapolation_error = min(min_extrapolation_error, final_extra_error)
+    
+    # Check if dual threshold was ever met during training
+    if not success_achieved and final_inter_error < _es_thr and final_extra_error < _es_thr:
+        success_achieved = True
+        success_at_step = epoch_i  # Use final epoch as success step
+    
+    # Report final success status
+    print(f"Paper-faithful evaluation results:")
+    print(f"  - Min interpolation error: {min_interpolation_error:.10f}")
+    print(f"  - Min extrapolation error: {min_extrapolation_error:.10f}")
+    print(f"  - Dual threshold (1e-7): {'✓ PASSED' if success_achieved else '✗ FAILED'}")
+    if success_achieved:
+        print(f"  - Success achieved at step: {success_at_step}")
+        
+        # Calculate final sparsity error for successful runs
+        if args.dag_depth == 1:
+            try:
+                dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
+                if dag is not None:
+                    final_sparsity_error = dag.calculate_sparsity_error(args.operation)
+                    print(f"  - Final sparsity error: {final_sparsity_error:.6f}")
+            except Exception as e:
+                print(f"  - Sparsity error calculation failed: {e}")
+elif success_achieved:
+    print(f"Early stopping succeeded at step {success_at_step}")
+    # Calculate sparsity for early stopping case too
+    if args.dag_depth == 1:
+        try:
+            dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
+            if dag is not None:
+                final_sparsity_error = dag.calculate_sparsity_error(args.operation)
+                print(f"  - Final sparsity error: {final_sparsity_error:.6f}")
+        except Exception as e:
+            print(f"  - Sparsity error calculation failed: {e}")
 
 print(f"  - loss_train_capped: {loss_train_capped}")
 print(f"  - loss_train (+reg loss): {loss_train}")

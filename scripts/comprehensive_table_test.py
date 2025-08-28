@@ -77,6 +77,7 @@ def run_single_test(
     show_progress=False,
     max_iterations=2000,
     restart_iter=None,
+    disable_early_stopping=False,
 ):
     """Run a single test and return result."""
 
@@ -117,6 +118,10 @@ def run_single_test(
     # Add restart argument if specified
     if restart_iter is not None:
         cmd.extend(["--restart-iter", str(restart_iter)])
+
+    # Add disable early stopping argument if specified
+    if disable_early_stopping:
+        cmd.append("--disable-early-stopping")
 
     # Add frozen selector arguments based on operation
     if operation in ["mul", "add"]:
@@ -170,6 +175,7 @@ def run_single_test(
         grokked = False
         grok_step = None
         final_inter_loss = float("inf")
+        final_sparsity_error = None
         nan_error = False
 
         # Check for NaN errors first
@@ -178,18 +184,41 @@ def run_single_test(
                 nan_error = True
                 break
 
-        # Check for early stopping
+        # Check for success based on evaluation mode
         if not nan_error:
-            for line in output_lines:
-                if "Early stopping at step" in line:
-                    grokked = True
-                    try:
-                        grok_step = int(line.split("step ")[1].split(":")[0])
-                    except:
-                        pass
-                    break
+            if disable_early_stopping:
+                # Parse paper-faithful evaluation results
+                for line in output_lines:
+                    if "✓ PASSED" in line and "Dual threshold" in line:
+                        grokked = True
+                    elif "Success achieved at step:" in line:
+                        try:
+                            grok_step = int(line.split("step: ")[1])
+                        except:
+                            pass
+                    elif "Final sparsity error:" in line:
+                        try:
+                            final_sparsity_error = float(line.split(":")[1].strip())
+                        except:
+                            pass
+            else:
+                # Check for early stopping (original logic)
+                for line in output_lines:
+                    if "Early stopping at step" in line:
+                        grokked = True
+                        try:
+                            grok_step = int(line.split("step ")[1].split(":")[0])
+                        except:
+                            pass
+                        # Extract sparsity from early stopping case
+                        continue
+                    elif "Final sparsity error:" in line and grokked:
+                        try:
+                            final_sparsity_error = float(line.split(":")[1].strip())
+                        except:
+                            pass
 
-        # Check final loss for NaN errors only (don't consider low loss as success without early stopping)
+        # Extract final interpolation loss for fallback analysis
         if not grokked and not nan_error:
             for line in reversed(output_lines):
                 if "- loss_valid_inter:" in line:
@@ -197,7 +226,6 @@ def run_single_test(
                         final_inter_loss = float(line.split(":")[1].strip())
                         if math.isnan(final_inter_loss):
                             nan_error = True
-                        # Only early stopping counts as success to avoid overfitting
                         break
                     except:
                         continue
@@ -215,6 +243,7 @@ def run_single_test(
             "seed": seed,
             "interp_range": interp_range,
             "extrap_range": extrap_range,
+            "range_name": range_name,
             "frozen_config": frozen_config,
             "grokked": grokked,
             "nan_error": nan_error,
@@ -222,6 +251,7 @@ def run_single_test(
             "grok_step": grok_step,
             "duration": duration,
             "final_inter_loss": final_inter_loss,
+            "sparsity_error": final_sparsity_error,
         }
 
     except subprocess.TimeoutExpired:
@@ -230,6 +260,7 @@ def run_single_test(
             "seed": seed,
             "interp_range": interp_range,
             "extrap_range": extrap_range,
+            "range_name": range_name,
             "frozen_config": frozen_config,
             "grokked": False,
             "nan_error": False,
@@ -237,7 +268,127 @@ def run_single_test(
             "grok_step": None,
             "duration": 120,
             "final_inter_loss": float("inf"),
+            "sparsity_error": None,
         }
+
+
+def calculate_operation_statistics(results, operation):
+    """Calculate statistics for a specific operation."""
+    op_results = [r for r in results if r.get("operation") == operation]
+    if not op_results:
+        return None
+        
+    # Success rate statistics  
+    successes = sum(1 for r in op_results if r.get("status") == "grokking")
+    trials = len(op_results)
+    
+    # Convergence time statistics (only for successful runs)
+    convergence_times = [r.get("grok_step") for r in op_results 
+                        if r.get("status") == "grokking" and r.get("grok_step") is not None]
+    
+    # Sparsity error statistics (only for successful runs where available)
+    sparsity_errors = [r.get("sparsity_error") for r in op_results 
+                      if r.get("status") == "grokking" and r.get("sparsity_error") is not None]
+    
+    return {
+        "operation": operation,
+        "success_rate": successes / trials if trials > 0 else 0.0,
+        "successes": successes, 
+        "trials": trials,
+        "convergence_times": convergence_times,
+        "mean_convergence": sum(convergence_times) / len(convergence_times) if convergence_times else float('inf'),
+        "sparsity_errors": sparsity_errors,
+        "mean_sparsity": sum(sparsity_errors) / len(sparsity_errors) if sparsity_errors else None
+    }
+
+
+def print_statistical_analysis(results):
+    """Print statistical analysis with confidence intervals."""
+    
+    # Import confidence interval functions
+    try:
+        sys.path.append(str(Path(__file__).parent.parent / "misc"))
+        from confidence_intervals import (
+            binomial_confidence_interval, 
+            gamma_confidence_interval,
+            format_confidence_interval
+        )
+    except ImportError as e:
+        print(f"Warning: Could not import confidence interval functions: {e}")
+        print("Skipping statistical analysis with confidence intervals")
+        return
+    
+    print(f"\n{'='*60}")
+    print("STATISTICAL ANALYSIS WITH CONFIDENCE INTERVALS")
+    print(f"{'='*60}")
+    
+    # Overall statistics
+    total_successes = sum(1 for r in results if r.get("status") == "grokking")
+    total_trials = len(results)
+    overall_success_rate = total_successes / total_trials if total_trials > 0 else 0.0
+    
+    # Overall success rate confidence interval
+    overall_ci = binomial_confidence_interval(total_successes, total_trials)
+    print(f"\nOVERALL SUCCESS RATE:")
+    print(f"  Point estimate: {overall_success_rate:.3f} ({total_successes}/{total_trials})")
+    print(f"  95% Confidence Interval: {format_confidence_interval(overall_ci[0], overall_ci[1])}")
+    
+    # Per-operation analysis
+    print(f"\nPER-OPERATION ANALYSIS:")
+    print(f"{'Operation':<10} {'Success Rate':<15} {'95% CI':<20} {'Mean Conv. Time':<18} {'95% CI':<20} {'Mean Sparsity':<15} {'95% CI':<20}")
+    print(f"{'-'*10} {'-'*15} {'-'*20} {'-'*18} {'-'*20} {'-'*15} {'-'*20}")
+    
+    for operation in OPERATIONS:
+        stats = calculate_operation_statistics(results, operation)
+        if stats is None:
+            continue
+            
+        # Success rate CI
+        success_ci = binomial_confidence_interval(stats["successes"], stats["trials"])
+        success_rate_str = f"{stats['success_rate']:.3f}"
+        success_ci_str = format_confidence_interval(success_ci[0], success_ci[1])
+        
+        # Convergence time CI (only if we have successful runs)
+        if stats["convergence_times"]:
+            conv_ci = gamma_confidence_interval(stats["convergence_times"])
+            conv_mean_str = f"{stats['mean_convergence']:.1f}"
+            conv_ci_str = format_confidence_interval(conv_ci[0], conv_ci[1], precision=1)
+        else:
+            conv_mean_str = "∞"
+            conv_ci_str = "No successes"
+        
+        # Sparsity error CI (only if we have successful runs with sparsity data)
+        if stats["sparsity_errors"]:
+            from confidence_intervals import beta_confidence_interval
+            sparsity_ci = beta_confidence_interval(stats["sparsity_errors"])
+            sparsity_mean_str = f"{stats['mean_sparsity']:.6f}"
+            sparsity_ci_str = format_confidence_interval(sparsity_ci[0], sparsity_ci[1], precision=6)
+        else:
+            sparsity_mean_str = "—"
+            sparsity_ci_str = "No data"
+        
+        print(f"{operation.upper():<10} {success_rate_str:<15} {success_ci_str:<20} {conv_mean_str:<18} {conv_ci_str:<20} {sparsity_mean_str:<15} {sparsity_ci_str:<20}")
+    
+    # Range-specific analysis (if there are multiple ranges)
+    range_names = set(r.get("range_name", "unknown") for r in results)
+    if len(range_names) > 1:
+        print(f"\nPER-RANGE ANALYSIS:")
+        print(f"{'Range':<10} {'Success Rate':<15} {'95% CI':<25}")
+        print(f"{'-'*10} {'-'*15} {'-'*25}")
+        
+        for range_name in sorted(range_names):
+            range_results = [r for r in results if r.get("range_name") == range_name]
+            range_successes = sum(1 for r in range_results if r.get("status") == "grokking")
+            range_trials = len(range_results)
+            
+            if range_trials > 0:
+                range_success_rate = range_successes / range_trials
+                range_ci = binomial_confidence_interval(range_successes, range_trials)
+                
+                success_rate_str = f"{range_success_rate:.3f}"
+                ci_str = format_confidence_interval(range_ci[0], range_ci[1])
+                
+                print(f"{range_name:<10} {success_rate_str:<15} {ci_str:<25}")
 
 
 def main():
@@ -296,6 +447,12 @@ def main():
         type=int,
         default=None,
         help="Restart training with re-initialized model if no early stop by this iteration",
+    )
+    parser.add_argument(
+        "--disable-early-stopping",
+        action="store_true",
+        default=False,
+        help="Disable early stopping and run for full iterations. Success determined post-hoc by checking dual threshold (paper-faithful evaluation).",
     )
     args = parser.parse_args()
 
@@ -403,6 +560,7 @@ def main():
                     args.show_progress,
                     args.max_iterations,
                     args.restart_iter,
+                    args.disable_early_stopping,
                 )
                 results.append(result)
                 completed += 1
@@ -592,6 +750,9 @@ def main():
     print(f"Failed (not grokking): {total_failed}")
     print(f"Overall success rate: {overall_success_rate:.1f}%")
 
+    # Statistical analysis with confidence intervals
+    print_statistical_analysis(all_results)
+    
     # Clean up progress file on successful completion (only if we completed ALL experiments, not just limited ones)
     if not args.ops and len(progress_data.get("completed", {})) >= len(
         seeds_to_run

@@ -851,3 +851,63 @@ class DAGLayer(ExtendedTorchModule):
             self._log_lim = orig_log_lim
 
         return final_value.to(input.dtype).unsqueeze(-1)
+
+    def calculate_sparsity_error(self, operation: str) -> float:
+        """Calculate sparsity error for dag_depth=1 only, based on operation-specific optimal weights.
+        
+        Args:
+            operation: The arithmetic operation ('add', 'sub', 'mul', 'div')
+            
+        Returns:
+            sparsity_error: max(min(|W|, 1-|W|)) measuring distance to discrete weights
+            
+        Raises:
+            ValueError: If dag_depth > 1 (multiple valid solutions exist)
+            RuntimeError: If model hasn't been run yet (no weights available)
+        """
+        if self.dag_depth > 1:
+            raise ValueError(
+                f"Cannot calculate sparsity error for dag_depth={self.dag_depth} > 1: "
+                "multiple valid solutions exist"
+            )
+        
+        # Get the most recent weights (prefer eval weights if available, else training)
+        if hasattr(self, '_last_eval_O') and self._last_eval_O is not None:
+            O_weights = self._last_eval_O
+        elif hasattr(self, '_last_train_O') and self._last_train_O is not None:
+            O_weights = self._last_train_O
+        else:
+            raise RuntimeError(
+                "Model hasn't been run yet. Call forward() first to generate weights."
+            )
+        
+        # For dag_depth=1, we only have one step with weights for all nodes
+        # Shape: [batch_size, 1, total_nodes] -> take first batch element and first (only) step
+        if O_weights.dim() == 3:
+            weights = O_weights[0, 0, :self.num_initial_nodes]  # Only input nodes matter for dag_depth=1
+        else:
+            raise RuntimeError(f"Unexpected weight tensor shape: {O_weights.shape}")
+        
+        # Define optimal weight patterns for each operation
+        if operation.lower() in ['add', 'sub']:
+            # ADD/SUB optimal: [1, 1] or [1, -1] (or permutations)
+            # For simplicity, we'll check distance to [1, 1] pattern
+            optimal_pattern = torch.ones_like(weights[:2])  # First two inputs
+            if len(weights) > 2:
+                optimal_pattern = torch.cat([optimal_pattern, torch.zeros(len(weights) - 2)])
+        elif operation.lower() in ['mul', 'div']:
+            # MUL/DIV optimal: [1, 1] or [1, -1] (or permutations)
+            # For simplicity, we'll check distance to [1, 1] pattern
+            optimal_pattern = torch.ones_like(weights[:2])  # First two inputs
+            if len(weights) > 2:
+                optimal_pattern = torch.cat([optimal_pattern, torch.zeros(len(weights) - 2)])
+        else:
+            raise ValueError(f"Unknown operation: {operation}. Must be one of: add, sub, mul, div")
+        
+        # Calculate sparsity error: max(min(|W|, 1-|W|))
+        # This measures how far each weight is from being fully discrete (0 or ±1)
+        abs_weights = torch.abs(weights)
+        sparsity_per_weight = torch.min(abs_weights, 1.0 - abs_weights)
+        sparsity_error = torch.max(sparsity_per_weight).item()
+        
+        return sparsity_error
