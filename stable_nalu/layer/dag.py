@@ -533,61 +533,6 @@ class DAGLayer(ExtendedTorchModule):
         mixed = log_mag * (1.0 - G_step) + signed_values * G_step
         return torch.sum(O_step * mixed, dim=-1, keepdim=True)
 
-    def _compute_aggregates(
-        self,
-        working_mag: torch.Tensor,
-        working_sign: torch.Tensor,
-        O_step: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Aggregate linear/log terms for complex domain mixing."""
-        signed_values = working_sign * working_mag
-        log_mag = torch.log(torch.clamp(working_mag, min=self._mag_min))
-
-        R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)
-        R_log = torch.sum(O_step * log_mag, dim=-1, keepdim=True)
-
-        return R_lin, R_log
-
-    def _compute_new_sign(
-        self,
-        R_lin: torch.Tensor,
-        working_sign: torch.Tensor,
-        O_step: torch.Tensor,
-        G_step: torch.Tensor,
-    ) -> torch.Tensor:
-        """Mix signs in linear and log domains with bounded outputs."""
-
-        # We extract the linear sign based on result of the operation
-        linear_sign = torch.tanh(R_lin)
-
-        # Map working_sign to angles for smooth sign
-        w = torch.abs(O_step)
-        neg_frac = 0.5 * (1.0 - working_sign)  # 1 for −1, 0 for +1, fractional if soft
-        m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
-
-        # Smooth parity: +1 for even m, −1 for odd m, smooth in between when weights are fractional
-        log_sign = torch.cos(math.pi * m)
-        s = G_step * linear_sign + (1.0 - G_step) * log_sign
-
-        return s
-
-    def _compute_new_magnitude(
-        self,
-        R_lin: torch.Tensor,
-        R_log: torch.Tensor,
-        G_step: torch.Tensor,
-    ) -> torch.Tensor:
-        """Mix magnitudes in log space with bounded gate leverage."""
-        l_lin = torch.log(torch.clamp(torch.abs(R_lin), min=self._mag_min))
-        l_log = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
-        delta = l_lin - l_log
-        delta = tap(delta, "delta", self.enable_taps)
-        m_log = l_log + G_step * delta
-        m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
-        # This should be clamped to not be too large
-        V_mag = torch.exp(m_log)
-        return V_mag
-
     def soft_floor(self, x: torch.Tensor, min: float, t: float = 1.0) -> torch.Tensor:
         beta = 1.0 / t
         return min + torch.nn.functional.softplus(x - min, beta=beta)

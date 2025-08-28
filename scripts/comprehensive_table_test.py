@@ -73,6 +73,7 @@ def run_single_test(
     seed,
     interp_range,
     extrap_range,
+    range_name,
     show_progress=False,
     max_iterations=2000,
     restart_iter=None,
@@ -109,6 +110,8 @@ def run_single_test(
         "100",
         "--clip-grad-norm",
         "0.01",
+        "--note", 
+        f"seed{seed}_{range_name}",
     ]
 
     # Add restart argument if specified
@@ -194,7 +197,6 @@ def run_single_test(
                         final_inter_loss = float(line.split(":")[1].strip())
                         if math.isnan(final_inter_loss):
                             nan_error = True
-                        # Removed: elif final_inter_loss < 1e-8: grokked = True
                         # Only early stopping counts as success to avoid overfitting
                         break
                     except:
@@ -269,6 +271,19 @@ def main():
         help="Number of seeds to use, starting from 0 (default: 10, uses seeds 0-9)",
     )
     parser.add_argument(
+        "--seeds",
+        type=int,
+        nargs='+',
+        help="Specific seeds to use (e.g., --seeds 0 42 123). Takes precedence over --num-seeds.",
+    )
+    parser.add_argument(
+        "--ranges",
+        type=str,
+        nargs='+',
+        choices=["sym", "neg", "pos", "n10", "p01", "n01", "p11", "n20", "p20"],
+        help="Specific ranges to test (e.g., --ranges n01 pos sym). If not specified, tests all ranges.",
+    )
+    parser.add_argument(
         "--max-iterations",
         type=int,
         default=3000,
@@ -301,14 +316,30 @@ def main():
     # Filter operations if --op is specified
     operations_to_run = [args.op] if args.op else OPERATIONS
 
-    # Generate seeds based on --num-seeds argument
-    seeds_to_run = list(range(args.num_seeds))
+    # Filter ranges if --ranges is specified
+    if args.ranges:
+        ranges_to_run = [
+            (interp_range, extrap_range, range_name) 
+            for interp_range, extrap_range, range_name in TEST_RANGES 
+            if range_name in args.ranges
+        ]
+        print(f"Using specified ranges: {args.ranges}")
+    else:
+        ranges_to_run = TEST_RANGES
+        print(f"Using all ranges: {[name for _, _, name in TEST_RANGES]}")
+
+    # Generate seeds based on --seeds or --num-seeds argument
+    if args.seeds:
+        seeds_to_run = args.seeds
+        print(f"Using explicit seeds: {seeds_to_run}")
+    else:
+        seeds_to_run = list(range(args.num_seeds))
+        print(f"Using seeds 0-{args.num_seeds-1}: {seeds_to_run}")
 
     print(f"Operations: {operations_to_run}")
-    print(f"Seeds: {seeds_to_run}")
-    print(f"Ranges: {len(TEST_RANGES)} different interpolation/extrapolation pairs")
+    print(f"Ranges: {len(ranges_to_run)} different interpolation/extrapolation pairs")
 
-    total_experiments = len(seeds_to_run) * len(operations_to_run) * len(TEST_RANGES)
+    total_experiments = len(seeds_to_run) * len(operations_to_run) * len(ranges_to_run)
     completed_count = len(progress_data.get("completed", {}))
 
     if args.max_experiments:
@@ -332,7 +363,7 @@ def main():
         for operation in operations_to_run:
             print(f"  {operation.upper()}: ", end="")
 
-            for interp_range, extrap_range, range_name in TEST_RANGES:
+            for interp_range, extrap_range, range_name in ranges_to_run:
                 # Check if we've reached the experiment limit
                 if args.max_experiments and completed >= args.max_experiments:
                     print(
@@ -361,6 +392,7 @@ def main():
                     seed,
                     interp_range,
                     extrap_range,
+                    range_name,
                     args.show_progress,
                     args.max_iterations,
                     args.restart_iter,
@@ -454,7 +486,7 @@ def main():
 
     # Create DataFrame for analysis
     data = []
-    for interp_range, extrap_range, range_name in TEST_RANGES:
+    for interp_range, extrap_range, range_name in ranges_to_run:
         for operation in operations_to_run:
             op_range_results = [
                 r

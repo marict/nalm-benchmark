@@ -232,7 +232,7 @@ parser.add_argument(
     action="store",
     default=None,
     type=int,
-    help="Restart training with re-initialized model if no early stop by this iteration",
+    help="Restart interval: restart at iter, iter*2, iter*3, etc. if no early stop achieved",
 )
 parser.add_argument(
     "--batch-size",
@@ -1044,7 +1044,7 @@ if args.reinit:
 
 patience_counter = 0
 early_stop = False
-model_restarted = False
+restart_count = 0
 
 bin_indices = compute_bins(dataset_valid_interpolation_data[0])
 progress_bar = tqdm(
@@ -1071,7 +1071,7 @@ for epoch_i, (x_train, t_train) in progress_bar:
     )
     log_dict.update(binned_mse)
 
-    _es_thr = 1e-10
+    _es_thr = 1e-7
     PATIENCE = 100
     if interpolation_error < _es_thr:
         patience_counter += 1
@@ -1086,16 +1086,19 @@ for epoch_i, (x_train, t_train) in progress_bar:
         patience_counter = 0
 
     # Check for model restart if --restart-iter is specified
+    # Calculate next restart iteration: restart_iter * (restart_count + 1)
+    next_restart_iter = args.restart_iter * (restart_count + 1) if args.restart_iter is not None else None
+    
     if (
         args.restart_iter is not None
-        and epoch_i >= args.restart_iter
+        and epoch_i >= next_restart_iter
         and not early_stop
-        and not model_restarted
     ):
-        print(f"Restarting model at iteration {epoch_i} (no early stop achieved)")
+        restart_count += 1
+        print(f"Restarting model at iteration {epoch_i} (restart #{restart_count}, no early stop achieved)")
 
-        # Use a different seed for restart to avoid identical initialization
-        restart_seed = args.seed + 1000  # Add offset to original seed
+        # Use a different seed for each restart to avoid identical initialization
+        restart_seed = args.seed + 1000 + restart_count  # Different seed for each restart
         print(f"Using restart seed: {restart_seed}")
         seed_torch(restart_seed)
 
@@ -1133,8 +1136,8 @@ for epoch_i, (x_train, t_train) in progress_bar:
         else:
             scheduler = NoOpScheduler(optimizer)
         patience_counter = 0  # Reset patience counter
-        model_restarted = True
-        log_dict["model_restarted"] = 1
+        log_dict[f"restart_{restart_count}"] = epoch_i
+        log_dict["total_restarts"] = restart_count
 
     # forward
     y_train = model(x_train)
