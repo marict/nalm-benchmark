@@ -18,7 +18,6 @@ def test_dag_basic_linear_selector() -> None:
         in_features=2,
         out_features=1,
         dag_depth=1,
-        use_attention_selector=False,
         _enable_taps=False,
     )
     _basic_forward(layer)
@@ -60,7 +59,6 @@ def test_dag_gradient_flow() -> None:
         in_features=2,
         out_features=1,
         dag_depth=1,
-        use_attention_selector=False,
         _enable_taps=False,
     )
     layer.train()
@@ -135,7 +133,6 @@ def test_dag_gradient_magnitude_stability() -> None:
         in_features=2,
         out_features=1,
         dag_depth=1,
-        use_attention_selector=False,
         _enable_taps=False,
     )
     layer.train()
@@ -144,7 +141,8 @@ def test_dag_gradient_magnitude_stability() -> None:
     scales = [1e-3, 1.0, 1e3]
 
     for scale in scales:
-        x = torch.tensor([[1.0, -2.0]], dtype=torch.float32, requires_grad=True) * scale
+        x = torch.tensor([[1.0, -2.0]], dtype=torch.float32) * scale
+        x.requires_grad_(True)
 
         y = layer(x)
         loss = y.sum()
@@ -166,7 +164,6 @@ def test_dag_gradient_magnitudes() -> None:
         in_features=2,
         out_features=1,
         dag_depth=1,
-        use_attention_selector=False,
         _enable_taps=False,
     )
     layer.train()

@@ -78,6 +78,8 @@ def run_single_test(
     max_iterations=2000,
     restart_iter=None,
     disable_early_stopping=False,
+    batch_size=512,
+    disable_logging=False,
 ):
     """Run a single test and return result."""
 
@@ -97,7 +99,7 @@ def run_single_test(
         "--input-size",
         "2",
         "--batch-size",
-        "512",
+        str(batch_size),
         "--max-iterations",
         str(max_iterations),
         "--learning-rate",
@@ -108,7 +110,9 @@ def run_single_test(
         str(extrap_range),
         "--no-cuda",
         "--log-interval",
-        "100",
+        (
+            "99999" if disable_logging else "100"
+        ),  # Very high interval when logging disabled
         "--clip-grad-norm",
         "0.01",
         "--note",
@@ -122,6 +126,10 @@ def run_single_test(
     # Add disable early stopping argument if specified
     if disable_early_stopping:
         cmd.append("--disable-early-stopping")
+
+    # Add disable logging argument if specified
+    if disable_logging:
+        cmd.append("--disable-logging")
 
     # Add frozen selector arguments based on operation
     if operation in ["mul", "add"]:
@@ -277,117 +285,143 @@ def calculate_operation_statistics(results, operation):
     op_results = [r for r in results if r.get("operation") == operation]
     if not op_results:
         return None
-        
-    # Success rate statistics  
+
+    # Success rate statistics
     successes = sum(1 for r in op_results if r.get("status") == "grokking")
     trials = len(op_results)
-    
+
     # Convergence time statistics (only for successful runs)
-    convergence_times = [r.get("grok_step") for r in op_results 
-                        if r.get("status") == "grokking" and r.get("grok_step") is not None]
-    
+    convergence_times = [
+        r.get("grok_step")
+        for r in op_results
+        if r.get("status") == "grokking" and r.get("grok_step") is not None
+    ]
+
     # Sparsity error statistics (only for successful runs where available)
-    sparsity_errors = [r.get("sparsity_error") for r in op_results 
-                      if r.get("status") == "grokking" and r.get("sparsity_error") is not None]
-    
+    sparsity_errors = [
+        r.get("sparsity_error")
+        for r in op_results
+        if r.get("status") == "grokking" and r.get("sparsity_error") is not None
+    ]
+
     return {
         "operation": operation,
         "success_rate": successes / trials if trials > 0 else 0.0,
-        "successes": successes, 
+        "successes": successes,
         "trials": trials,
         "convergence_times": convergence_times,
-        "mean_convergence": sum(convergence_times) / len(convergence_times) if convergence_times else float('inf'),
+        "mean_convergence": (
+            sum(convergence_times) / len(convergence_times)
+            if convergence_times
+            else float("inf")
+        ),
         "sparsity_errors": sparsity_errors,
-        "mean_sparsity": sum(sparsity_errors) / len(sparsity_errors) if sparsity_errors else None
+        "mean_sparsity": (
+            sum(sparsity_errors) / len(sparsity_errors) if sparsity_errors else None
+        ),
     }
 
 
 def print_statistical_analysis(results):
     """Print statistical analysis with confidence intervals."""
-    
+
     # Import confidence interval functions
     try:
         sys.path.append(str(Path(__file__).parent.parent / "misc"))
-        from confidence_intervals import (
-            binomial_confidence_interval, 
-            gamma_confidence_interval,
-            format_confidence_interval
-        )
+        from confidence_intervals import (binomial_confidence_interval,
+                                          format_confidence_interval,
+                                          gamma_confidence_interval)
     except ImportError as e:
         print(f"Warning: Could not import confidence interval functions: {e}")
         print("Skipping statistical analysis with confidence intervals")
         return
-    
+
     print(f"\n{'='*60}")
     print("STATISTICAL ANALYSIS WITH CONFIDENCE INTERVALS")
     print(f"{'='*60}")
-    
+
     # Overall statistics
     total_successes = sum(1 for r in results if r.get("status") == "grokking")
     total_trials = len(results)
     overall_success_rate = total_successes / total_trials if total_trials > 0 else 0.0
-    
+
     # Overall success rate confidence interval
     overall_ci = binomial_confidence_interval(total_successes, total_trials)
     print(f"\nOVERALL SUCCESS RATE:")
-    print(f"  Point estimate: {overall_success_rate:.3f} ({total_successes}/{total_trials})")
-    print(f"  95% Confidence Interval: {format_confidence_interval(overall_ci[0], overall_ci[1])}")
-    
+    print(
+        f"  Point estimate: {overall_success_rate:.3f} ({total_successes}/{total_trials})"
+    )
+    print(
+        f"  95% Confidence Interval: {format_confidence_interval(overall_ci[0], overall_ci[1])}"
+    )
+
     # Per-operation analysis
     print(f"\nPER-OPERATION ANALYSIS:")
-    print(f"{'Operation':<10} {'Success Rate':<15} {'95% CI':<20} {'Mean Conv. Time':<18} {'95% CI':<20} {'Mean Sparsity':<15} {'95% CI':<20}")
+    print(
+        f"{'Operation':<10} {'Success Rate':<15} {'95% CI':<20} {'Mean Conv. Time':<18} {'95% CI':<20} {'Mean Sparsity':<15} {'95% CI':<20}"
+    )
     print(f"{'-'*10} {'-'*15} {'-'*20} {'-'*18} {'-'*20} {'-'*15} {'-'*20}")
-    
+
     for operation in OPERATIONS:
         stats = calculate_operation_statistics(results, operation)
         if stats is None:
             continue
-            
+
         # Success rate CI
         success_ci = binomial_confidence_interval(stats["successes"], stats["trials"])
         success_rate_str = f"{stats['success_rate']:.3f}"
         success_ci_str = format_confidence_interval(success_ci[0], success_ci[1])
-        
+
         # Convergence time CI (only if we have successful runs)
         if stats["convergence_times"]:
             conv_ci = gamma_confidence_interval(stats["convergence_times"])
             conv_mean_str = f"{stats['mean_convergence']:.1f}"
-            conv_ci_str = format_confidence_interval(conv_ci[0], conv_ci[1], precision=1)
+            conv_ci_str = format_confidence_interval(
+                conv_ci[0], conv_ci[1], precision=1
+            )
         else:
             conv_mean_str = "∞"
             conv_ci_str = "No successes"
-        
+
         # Sparsity error CI (only if we have successful runs with sparsity data)
         if stats["sparsity_errors"]:
             from confidence_intervals import beta_confidence_interval
+
             sparsity_ci = beta_confidence_interval(stats["sparsity_errors"])
-            sparsity_mean_str = f"{stats['mean_sparsity']:.6f}"
-            sparsity_ci_str = format_confidence_interval(sparsity_ci[0], sparsity_ci[1], precision=6)
+            sparsity_mean_str = (
+                f"{stats['mean_sparsity']:.2e}"  # Scientific notation, 2 decimals
+            )
+            # Format CI bounds in scientific notation
+            sparsity_ci_str = f"[{sparsity_ci[0]:.2e}, {sparsity_ci[1]:.2e}]"
         else:
             sparsity_mean_str = "—"
             sparsity_ci_str = "No data"
-        
-        print(f"{operation.upper():<10} {success_rate_str:<15} {success_ci_str:<20} {conv_mean_str:<18} {conv_ci_str:<20} {sparsity_mean_str:<15} {sparsity_ci_str:<20}")
-    
+
+        print(
+            f"{operation.upper():<10} {success_rate_str:<15} {success_ci_str:<20} {conv_mean_str:<18} {conv_ci_str:<20} {sparsity_mean_str:<15} {sparsity_ci_str:<20}"
+        )
+
     # Range-specific analysis (if there are multiple ranges)
     range_names = set(r.get("range_name", "unknown") for r in results)
     if len(range_names) > 1:
         print(f"\nPER-RANGE ANALYSIS:")
         print(f"{'Range':<10} {'Success Rate':<15} {'95% CI':<25}")
         print(f"{'-'*10} {'-'*15} {'-'*25}")
-        
+
         for range_name in sorted(range_names):
             range_results = [r for r in results if r.get("range_name") == range_name]
-            range_successes = sum(1 for r in range_results if r.get("status") == "grokking")
+            range_successes = sum(
+                1 for r in range_results if r.get("status") == "grokking"
+            )
             range_trials = len(range_results)
-            
+
             if range_trials > 0:
                 range_success_rate = range_successes / range_trials
                 range_ci = binomial_confidence_interval(range_successes, range_trials)
-                
+
                 success_rate_str = f"{range_success_rate:.3f}"
                 ci_str = format_confidence_interval(range_ci[0], range_ci[1])
-                
+
                 print(f"{range_name:<10} {success_rate_str:<15} {ci_str:<25}")
 
 
@@ -443,6 +477,23 @@ def main():
         help="Maximum training iterations per experiment (default: 3000)",
     )
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=512,
+        help="Batch size for training (default: 512)",
+    )
+    parser.add_argument(
+        "--disable-logging",
+        action="store_true",
+        default=True,
+        help="Disable wandb logging and DAG taps to speed up runs (default: True, use --enable-logging to turn on)",
+    )
+    parser.add_argument(
+        "--enable-logging",
+        action="store_true",
+        help="Enable wandb logging and DAG taps (overrides --disable-logging default)",
+    )
+    parser.add_argument(
         "--restart-iter",
         type=int,
         default=None,
@@ -455,6 +506,10 @@ def main():
         help="Disable early stopping and run for full iterations. Success determined post-hoc by checking dual threshold (paper-faithful evaluation).",
     )
     args = parser.parse_args()
+
+    # Handle enable-logging override
+    if args.enable_logging:
+        args.disable_logging = False
 
     # Setup progress tracking
     output_dir = Path("experiment_results")
@@ -502,6 +557,9 @@ def main():
 
     print(f"Operations: {operations_to_run}")
     print(f"Ranges: {len(ranges_to_run)} different interpolation/extrapolation pairs")
+    print(
+        f"Logging: {'DISABLED' if args.disable_logging else 'ENABLED'} ({'faster runs' if args.disable_logging else 'full wandb tracking'})"
+    )
 
     total_experiments = len(seeds_to_run) * len(operations_to_run) * len(ranges_to_run)
     completed_count = len(progress_data.get("completed", {}))
@@ -561,6 +619,8 @@ def main():
                     args.max_iterations,
                     args.restart_iter,
                     args.disable_early_stopping,
+                    args.batch_size,
+                    args.disable_logging,
                 )
                 results.append(result)
                 completed += 1
@@ -752,7 +812,7 @@ def main():
 
     # Statistical analysis with confidence intervals
     print_statistical_analysis(all_results)
-    
+
     # Clean up progress file on successful completion (only if we completed ALL experiments, not just limited ones)
     if not args.ops and len(progress_data.get("completed", {})) >= len(
         seeds_to_run
