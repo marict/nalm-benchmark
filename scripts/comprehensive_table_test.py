@@ -78,7 +78,8 @@ def run_single_test(
     max_iterations=2000,
     restart_iter=None,
     disable_early_stopping=False,
-    batch_size=512,
+    # batch_size=512,
+    batch_size=128,
     disable_logging=False,
 ):
     """Run a single test and return result."""
