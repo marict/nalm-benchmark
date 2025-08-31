@@ -87,6 +87,7 @@ class DAGLayer(ExtendedTorchModule):
         freeze_O_div: bool = False,
         freeze_O_mul: bool = False,
         no_selector: bool = False,
+        unfreeze_eval: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -111,6 +112,7 @@ class DAGLayer(ExtendedTorchModule):
         self.freeze_O_div = bool(freeze_O_div)
         self.freeze_O_mul = bool(freeze_O_mul)
         self.no_selector = bool(no_selector)
+        self.unfreeze_eval = bool(unfreeze_eval)
 
         head_input_size = in_features
 
@@ -252,7 +254,7 @@ class DAGLayer(ExtendedTorchModule):
         # Save raw G weights before any discretization for sparsity calculation
         raw_G = G.detach()
 
-        if not self.training:
+        if not self.training and not self.unfreeze_eval:
             # Only apply eval discretization if STEs are not already handling it
             G = (G > 0.5).to(G.dtype)
             O = torch.round(O).clamp(-1.0, 1.0)
@@ -492,7 +494,7 @@ class DAGLayer(ExtendedTorchModule):
             final_value = value_vec_inter[:, -1]  # Last intermediate value
         else:
             # Use the normal output selector logic
-            if not self.training:
+            if not self.training and not self.unfreeze_eval:
                 idx = torch.argmax(out_logits, dim=-1, keepdim=True)
                 final_value = value_vec_inter.gather(-1, idx).squeeze(-1)
             else:

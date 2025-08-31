@@ -78,9 +78,10 @@ def run_single_test(
     max_iterations=2000,
     restart_iter=None,
     disable_early_stopping=False,
-    # batch_size=512,
     batch_size=128,
     disable_logging=False,
+    disable_sounds=False,
+    unfreeze_eval=False,
 ):
     """Run a single test and return result."""
 
@@ -131,6 +132,14 @@ def run_single_test(
     # Add disable logging argument if specified
     if disable_logging:
         cmd.append("--disable-logging")
+
+    # Add disable sounds argument if specified
+    if disable_sounds:
+        cmd.append("--disable-sounds")
+
+    # Add unfreeze eval argument if specified
+    if unfreeze_eval:
+        cmd.append("--unfreeze-eval")
 
     # Add frozen selector arguments based on operation
     if operation in ["mul", "add"]:
@@ -484,15 +493,10 @@ def main():
         help="Batch size for training (default: 512)",
     )
     parser.add_argument(
-        "--disable-logging",
-        action="store_true",
-        default=True,
-        help="Disable wandb logging and DAG taps to speed up runs (default: True, use --enable-logging to turn on)",
-    )
-    parser.add_argument(
         "--enable-logging",
         action="store_true",
-        help="Enable wandb logging and DAG taps (overrides --disable-logging default)",
+        default=False,
+        help="Enable wandb logging and DAG taps (default: False, logging is disabled for faster runs)",
     )
     parser.add_argument(
         "--restart-iter",
@@ -506,11 +510,22 @@ def main():
         default=False,
         help="Disable early stopping and run for full iterations. Success determined post-hoc by checking dual threshold (paper-faithful evaluation).",
     )
+    parser.add_argument(
+        "--disable-sounds",
+        action="store_true",
+        default=False,
+        help="Disable success/failure sounds on macOS",
+    )
+    parser.add_argument(
+        "--unfreeze-eval",
+        action="store_true",
+        default=False,
+        help="Use soft weights during evaluation instead of discretizing them (DAG layer only)",
+    )
     args = parser.parse_args()
 
-    # Handle enable-logging override
-    if args.enable_logging:
-        args.disable_logging = False
+    # Set disable_logging as the inverse of enable_logging
+    args.disable_logging = not args.enable_logging
 
     # Setup progress tracking
     output_dir = Path("experiment_results")
@@ -559,7 +574,10 @@ def main():
     print(f"Operations: {operations_to_run}")
     print(f"Ranges: {len(ranges_to_run)} different interpolation/extrapolation pairs")
     print(
-        f"Logging: {'DISABLED' if args.disable_logging else 'ENABLED'} ({'faster runs' if args.disable_logging else 'full wandb tracking'})"
+        f"Logging: {'ENABLED' if args.enable_logging else 'DISABLED'} ({'full wandb tracking' if args.enable_logging else 'faster runs'})"
+    )
+    print(
+        f"Sounds: {'DISABLED' if args.disable_sounds else 'ENABLED'} ({'quieter runs' if args.disable_sounds else 'audio feedback'})"
     )
 
     total_experiments = len(seeds_to_run) * len(operations_to_run) * len(ranges_to_run)
@@ -622,6 +640,8 @@ def main():
                     args.disable_early_stopping,
                     args.batch_size,
                     args.disable_logging,
+                    args.disable_sounds,
+                    args.unfreeze_eval,
                 )
                 results.append(result)
                 completed += 1

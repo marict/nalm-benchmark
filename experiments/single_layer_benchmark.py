@@ -700,6 +700,20 @@ parser.add_argument(
     help="Mix magnitudes in log space for gradient stability (DAG layer only)",
 )
 
+parser.add_argument(
+    "--disable-sounds",
+    action="store_true",
+    default=False,
+    help="Disable success/failure sounds on macOS",
+)
+
+parser.add_argument(
+    "--unfreeze-eval",
+    action="store_true",
+    default=False,
+    help="Use soft weights during evaluation instead of discretizing them (DAG layer only)",
+)
+
 
 # Compute bins for |x|
 def compute_bins(x, num_bins: int = 5):
@@ -1001,6 +1015,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     freeze_O_div=getattr(args, "freeze_O_div", False),
     freeze_O_mul=getattr(args, "freeze_O_mul", False),
     no_selector=getattr(args, "no_selector", False),
+    unfreeze_eval=getattr(args, "unfreeze_eval", False),
     # Disable taps when logging is disabled
     _enable_taps=not getattr(args, "disable_logging", False),
 )
@@ -1530,11 +1545,11 @@ print()
 if not args.no_open_browser:
     progress_bar.close()
 
-# Play completion sound on macOS
+# Play completion sound on macOS (unless disabled)
 import os
 import platform
 
-if platform.system() == "Darwin":  # macOS
+if not args.disable_sounds and platform.system() == "Darwin":  # macOS
     try:
         # Play success sound if grokking was achieved (either via early stopping or paper-faithful evaluation)
         if early_stop or success_achieved:
