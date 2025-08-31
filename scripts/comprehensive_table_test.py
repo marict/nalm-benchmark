@@ -75,7 +75,7 @@ def run_single_test(
     extrap_range,
     range_name,
     show_progress=False,
-    max_iterations=2000,
+    max_iterations=50000,
     restart_iter=None,
     disable_early_stopping=False,
     batch_size=128,

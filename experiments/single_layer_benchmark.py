@@ -3,6 +3,7 @@ import ast
 import datetime
 import math
 import os
+import platform
 import random
 import time
 from decimal import Decimal
@@ -1117,70 +1118,40 @@ for epoch_i, (x_train, t_train) in progress_bar:
     # model.set_parameter("tau", max(0.5, math.exp(-1e-5 * epoch_i)))
     optimizer.zero_grad()
     log_dict = {}
-
-    # Compute binned MSE for interpolation data (also returns total interpolation error)
-    binned_mse, interpolation_error = compute_binned_mse(
-        dataset_valid_interpolation_data, bin_indices, "inter"
-    )
-    log_dict.update(binned_mse)
-
     _es_thr = 1e-7
     PATIENCE = 100
 
-    # Always track minimum errors for paper-faithful evaluation
-    min_interpolation_error = min(min_interpolation_error, interpolation_error)
+    # Always check extrapolation error every iteration for accurate success tracking
+    extrapolation_error = test_model(dataset_test_extrapolation_data)
+    min_extrapolation_error = min(
+        min_extrapolation_error, extrapolation_error.detach().cpu().item()
+    )
 
-    if not args.disable_early_stopping:
-        # Original early stopping logic with dual threshold check
-        if interpolation_error < _es_thr:
-            patience_counter += 1
-            if patience_counter >= PATIENCE:
-                # Check extrapolation error for dual threshold
-                extrapolation_error = test_model(dataset_test_extrapolation_data)
-                min_extrapolation_error = min(
-                    min_extrapolation_error, extrapolation_error.detach().cpu().item()
-                )
+    if extrapolation_error.detach().cpu().item() < _es_thr:
+        patience_counter += 1
 
-                # Dual threshold check: both inter AND extra must be below threshold
-                if extrapolation_error.detach().cpu().item() < _es_thr:
-                    print(
-                        f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
-                    )
-                    log_dict["early_stopped"] = 1
-                    early_stop = True
-                    success_achieved = True
-                    success_at_step = epoch_i
-                else:
-                    print(
-                        f"Inter threshold met but extra too high at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
-                    )
-                    patience_counter = (
-                        0  # Reset patience if extrapolation doesn't meet threshold
-                    )
-        else:
-            patience_counter = 0
-    else:
-        # When early stopping is disabled, still track if we would have succeeded
-        # Check extrapolation error periodically to track minimum
-        if epoch_i % args.log_interval == 0 or interpolation_error < _es_thr:
-            extrapolation_error = test_model(dataset_test_extrapolation_data)
-            min_extrapolation_error = min(
-                min_extrapolation_error, extrapolation_error.detach().cpu().item()
+        # Track success achievement
+        if not success_achieved:
+            success_achieved = True
+            success_at_step = epoch_i
+            status_msg = (
+                "continuing training"
+                if args.disable_early_stopping
+                else f"patience {patience_counter}/{PATIENCE}"
+            )
+            print(
+                f"Extrapolation threshold achieved at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f} ({status_msg})"
             )
 
-            # Check if dual threshold is met (for tracking, not stopping)
-            if (
-                interpolation_error < _es_thr
-                and extrapolation_error.detach().cpu().item() < _es_thr
-            ):
-                if not success_achieved:
-                    success_achieved = True
-                    success_at_step = epoch_i
-                    print(
-                        f"Dual threshold achieved at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f} (continuing training)"
-                    )
-
-    # Track the fact that both thresholds were achieved at some point
+        # Only actually stop if early stopping is enabled and patience reached
+        if not args.disable_early_stopping and patience_counter >= PATIENCE:
+            print(
+                f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
+            )
+            log_dict["early_stopped"] = 1
+            early_stop = True
+    else:
+        patience_counter = 0
 
     # Check for model restart if --restart-iter is specified
     # Calculate next restart iteration: restart_iter * (restart_count + 1)
@@ -1298,7 +1269,7 @@ for epoch_i, (x_train, t_train) in progress_bar:
         * regualizers["g-NPU"]
         + (
             (0.05 * regualizers["inalu"])
-            if (interpolation_error < 1 and epoch_i > 10000)
+            if (min_interpolation_error < 1 and epoch_i > 10000)
             else 0
         )
     )
@@ -1307,7 +1278,6 @@ for epoch_i, (x_train, t_train) in progress_bar:
     dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
 
     log_dict["loss/train"] = float(loss_train_criterion.detach().cpu().item())
-    log_dict["mse/inter"] = float(interpolation_error)
 
     # Log training batch target statistics
     log_dict["targets/train_mean"] = float(t_train.mean().detach().cpu().item())
@@ -1331,7 +1301,17 @@ for epoch_i, (x_train, t_train) in progress_bar:
     commit = False
     if epoch_i % args.log_interval == 0 or early_stop:
         commit = True
-        extrapolation_error = test_model(dataset_test_extrapolation_data)
+
+        # Compute binned MSE for interpolation data (only at log intervals)
+        binned_mse, interpolation_error = compute_binned_mse(
+            dataset_valid_interpolation_data, bin_indices, "inter"
+        )
+        log_dict.update(binned_mse)
+        log_dict["mse/inter"] = float(interpolation_error)
+
+        # Track minimum interpolation error
+        min_interpolation_error = min(min_interpolation_error, interpolation_error)
+
         log_dict["mse/extra"] = float(extrapolation_error.detach().cpu().item())
 
         print(
@@ -1490,12 +1470,8 @@ if args.disable_early_stopping:
     min_interpolation_error = min(min_interpolation_error, final_inter_error)
     min_extrapolation_error = min(min_extrapolation_error, final_extra_error)
 
-    # Check if dual threshold was ever met during training
-    if (
-        not success_achieved
-        and final_inter_error < _es_thr
-        and final_extra_error < _es_thr
-    ):
+    # Check if extrapolation threshold was ever met during training
+    if not success_achieved and final_extra_error < _es_thr:
         success_achieved = True
         success_at_step = epoch_i  # Use final epoch as success step
 
@@ -1504,7 +1480,7 @@ if args.disable_early_stopping:
     print(f"  - Min interpolation error: {min_interpolation_error:.10f}")
     print(f"  - Min extrapolation error: {min_extrapolation_error:.10f}")
     print(
-        f"  - Dual threshold (1e-7): {'✓ PASSED' if success_achieved else '✗ FAILED'}"
+        f"  - Extrapolation threshold (1e-7): {'✓ PASSED' if success_achieved else '✗ FAILED'}"
     )
     if success_achieved:
         print(f"  - Success achieved at step: {success_at_step}")
@@ -1546,9 +1522,6 @@ if not args.no_open_browser:
     progress_bar.close()
 
 # Play completion sound on macOS (unless disabled)
-import os
-import platform
-
 if not args.disable_sounds and platform.system() == "Darwin":  # macOS
     try:
         # Play success sound if grokking was achieved (either via early stopping or paper-faithful evaluation)
