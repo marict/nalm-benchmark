@@ -82,12 +82,16 @@ class DAGLayer(ExtendedTorchModule):
         _enable_debug_logging: bool = False,
         _enable_taps: bool = True,
         _do_not_predict_weights: bool = False,
-        freeze_g_log: bool = False,
-        freeze_g_linear: bool = False,
+        freeze_G_weights_log: bool = False,
+        freeze_G_weights_lin: bool = False,
         freeze_O_div: bool = False,
         freeze_O_mul: bool = False,
         no_selector: bool = False,
         unfreeze_eval: bool = False,
+        G_perturbation: float = 0.0,
+        freeze_input_norm: bool = False,
+        use_norm: bool = True,
+        dual_G: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -104,8 +108,8 @@ class DAGLayer(ExtendedTorchModule):
         self.num_initial_nodes = in_features
         self.total_nodes = self.num_initial_nodes + self.dag_depth
 
-        self.freeze_g_linear = bool(freeze_g_linear)
-        self.freeze_g_log = bool(freeze_g_log)
+        self.freeze_G_weights_lin = bool(freeze_G_weights_lin)
+        self.freeze_G_weights_log = bool(freeze_G_weights_log)
         self.enable_debug_logging = bool(_enable_debug_logging)
         self.enable_taps = bool(_enable_taps)
         self._do_not_predict_weights = bool(_do_not_predict_weights)
@@ -113,25 +117,62 @@ class DAGLayer(ExtendedTorchModule):
         self.freeze_O_mul = bool(freeze_O_mul)
         self.no_selector = bool(no_selector)
         self.unfreeze_eval = bool(unfreeze_eval)
+        self.G_perturbation = float(G_perturbation)
+        self.freeze_input_norm = bool(freeze_input_norm)
+        self.use_norm = bool(use_norm)
+        self.dual_G = bool(dual_G)
+        
+        # Error check: dual_G is not compatible with frozen G weights
+        if self.dual_G and (self.freeze_G_weights_log or self.freeze_G_weights_lin):
+            raise ValueError("dual_G mode is not compatible with freeze_G_weights_log or freeze_G_weights_lin")
 
         head_input_size = in_features
 
         self.O_mag_head = nn.Linear(head_input_size, self.dag_depth * self.total_nodes)
         self.O_sign_head = nn.Linear(head_input_size, self.dag_depth * self.total_nodes)
-        self.G_head = nn.Linear(head_input_size, self.dag_depth)
+        # G_head: outputs 2 logits per dag step if dual_G, else 1 logit per dag step
+        g_head_output_size = self.dag_depth * 2 if self.dual_G else self.dag_depth
+        self.G_head = nn.Linear(head_input_size, g_head_output_size)
 
         # Add normalization layers (gated behind flag)
-        self.input_norm = nn.LayerNorm(in_features)
+        if self.use_norm:
+            self.input_norm = nn.LayerNorm(in_features)
+            self.extra_norm1 = nn.LayerNorm(in_features)
+            self.extra_norm2 = nn.LayerNorm(in_features)
+            self.extra_norm3 = nn.LayerNorm(in_features)
+            self.extra_norm4 = nn.LayerNorm(in_features)
+            self.extra_norm5 = nn.LayerNorm(in_features)
+
+
+            # Freeze input norm parameters if specified
+            if self.freeze_input_norm:
+                self.input_norm.weight.requires_grad = False
+                self.input_norm.bias.requires_grad = False
+                # Set perfect weights: weight=1.0, bias=0.0
+                with torch.no_grad():
+                    self.input_norm.weight.fill_(1.0)
+                    self.input_norm.bias.fill_(0.0)
+        else:
+            self.input_norm = None
 
         self.O_mask = torch.zeros(self.dag_depth, self.total_nodes)
         for step in range(self.dag_depth):
             valid_nodes = self.num_initial_nodes + step
             self.O_mask[step, :valid_nodes] = 1.0
 
-        self.output_selector_head = nn.Linear(head_input_size, self.dag_depth)
+        # Only create output selector if needed
+        if not self.no_selector:
+            self.output_selector_head = nn.Linear(head_input_size, self.dag_depth)
+        else:
+            self.output_selector_head = None
 
         self.reset_parameters()
-
+        
+        # Freeze parameters if specified  
+        if self.freeze_G_weights_log or self.freeze_G_weights_lin:
+            self.G_head.weight.requires_grad = False
+            self.G_head.bias.requires_grad = False
+        
         self._mag_min = 1e-11
         self._mag_max = 1e6
         self._log_lim = math.log(self._mag_max) - 1.0
@@ -141,44 +182,71 @@ class DAGLayer(ExtendedTorchModule):
         nn.init.xavier_uniform_(self.O_mag_head.weight)
         nn.init.xavier_uniform_(self.O_sign_head.weight)
         nn.init.xavier_uniform_(self.G_head.weight)
-        nn.init.xavier_uniform_(self.output_selector_head.weight)
 
         # Initialize all biases to zero
         nn.init.zeros_(self.O_mag_head.bias)
         nn.init.zeros_(self.O_sign_head.bias)
         nn.init.zeros_(self.G_head.bias)
-        nn.init.zeros_(self.output_selector_head.bias)
+
+        # Initialize output_selector_head if it exists
+        if self.output_selector_head is not None:
+            nn.init.zeros_(self.output_selector_head.bias)
+            nn.init.xavier_uniform_(self.output_selector_head.weight)
 
         # Apply frozen selector initialization if enabled
         with torch.no_grad():
-            if self.freeze_O_div:
-                # Initialize bias for division pattern [1, -1, 0, ...]
-                for step in range(self.dag_depth):
-                    step_start = step * self.total_nodes
-                    if self.num_initial_nodes >= 2:
-                        self.O_sign_head.bias[step_start] = 1.0  # First input: positive
-                        self.O_sign_head.bias[step_start + 1] = (
-                            -1.0
-                        )  # Second input: negative
-                        # Remaining positions stay at 0
-
-            elif self.freeze_O_mul:
-                # Initialize bias for multiplication pattern [1, 1, 0, ...]
-                for step in range(self.dag_depth):
-                    step_start = step * self.total_nodes
-                    if self.num_initial_nodes >= 2:
-                        self.O_sign_head.bias[step_start] = 1.0  # First input: positive
-                        self.O_sign_head.bias[step_start + 1] = (
-                            1.0  # Second input: positive
-                        )
-                        # Remaining positions stay at 0
+            
+            # Perfect G_head initialization based on weights
+            if self.freeze_G_weights_log or self.freeze_G_weights_lin:
+                # Initialize weights to produce perfect G values
+                nn.init.zeros_(self.G_head.weight)  # Zero weights so output = bias
+                
+                if self.dual_G:
+                    # For dual_G: output is [lin_logit, log_logit] per dag step
+                    # We want softmax([lin_logit, log_logit]) = [G_lin, G_log]
+                    for i in range(self.dag_depth):
+                        lin_idx = i * 2      # Linear gate logit index
+                        log_idx = i * 2 + 1  # Log gate logit index
+                        
+                        if self.freeze_G_weights_log:
+                            # Want G_log ≈ 1, G_lin ≈ 0: set log_logit >> lin_logit
+                            self.G_head.bias[lin_idx] = -10.0  # Low linear logit
+                            self.G_head.bias[log_idx] = 10.0   # High log logit
+                        elif self.freeze_G_weights_lin:
+                            # Want G_lin ≈ 1, G_log ≈ 0: set lin_logit >> log_logit
+                            self.G_head.bias[lin_idx] = 10.0   # High linear logit
+                            self.G_head.bias[log_idx] = -10.0  # Low log logit
+                else:
+                    # Original single G behavior
+                    if self.freeze_G_weights_log:
+                        # Need sigmoid(bias) ≈ 0, so bias should be very negative
+                        self.G_head.bias.fill_(-10.0)  # sigmoid(-10) ≈ 0.000045
+                    elif self.freeze_G_weights_lin:
+                        # Need sigmoid(bias) ≈ 1, so bias should be very positive  
+                        self.G_head.bias.fill_(10.0)   # sigmoid(10) ≈ 0.999955
+                
+                # Apply G perturbation after perfect initialization
+                if self.G_perturbation != 0.0:
+                    # Only perturb G_head parameters
+                    for param in [self.G_head.weight, self.G_head.bias]:
+                        # Generate random ±1 signs for each parameter element
+                        signs = torch.randint_like(param, 0, 2) * 2 - 1  # Random ±1
+                        # Apply perturbation: W* ± ε (where W* are the perfect G weights)
+                        param.add_(signs * self.G_perturbation)
+            
 
     def predict_dag_weights(self, input: torch.Tensor, device, dtype, B: int):
         """Predict DAG weights using neural network heads."""
         # Extract dense features if enabled
         head_input = input
 
-        head_input = self.input_norm(head_input)  # inf, inf
+        if self.use_norm:
+            head_input = self.input_norm(head_input)
+            head_input = self.extra_norm1(head_input)
+            head_input = self.extra_norm2(head_input)
+            head_input = self.extra_norm3(head_input)
+            head_input = self.extra_norm4(head_input)
+            head_input = self.extra_norm5(head_input)
 
         O_mag_flat = self.O_mag_head(head_input)
         O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
@@ -196,8 +264,7 @@ class DAGLayer(ExtendedTorchModule):
         if not self.no_selector:
             out_logits = self.output_selector_head(head_input).to(dtype)
         else:
-            # Create dummy out_logits for logging when no selector is used
-            out_logits = torch.zeros(B, self.dag_depth, device=device, dtype=dtype)
+            out_logits = None
 
         O_mask = self.O_mask.to(dtype).to(device)
         if (
@@ -215,7 +282,7 @@ class DAGLayer(ExtendedTorchModule):
         O_sign = O_sign * O_mask
         O = O_sign * O_mag
 
-        # Apply selector freezing if enabled
+        # Apply selector freezing if enabled (override O with hardcoded patterns)
         if self.freeze_O_div:
             # Freeze to division pattern: [1, -1, 0, 0, 0, ...] for all steps
             pattern = torch.zeros(self.total_nodes, device=O.device, dtype=O.dtype)
@@ -239,24 +306,54 @@ class DAGLayer(ExtendedTorchModule):
 
         O = tap(O, "O_selector", self.enable_taps)
 
-        eps = 1e-5
-        G = torch.sigmoid(G_logits).to(dtype)
-        G = eps + (1.0 - 2.0 * eps) * G
-        G = tap(G, "G_gate", self.enable_taps)
+        if self.dual_G:
+            # Dual G mode: G_logits has shape [B, dag_depth*2]
+            # Reshape to [B, dag_depth, 2] for softmax over the 2 gate types
+            G_logits_reshaped = G_logits.view(B, self.dag_depth, 2)
+            G_probs = torch.softmax(G_logits_reshaped, dim=-1)  # [B, dag_depth, 2]
+            
+            # Extract linear and log gate probabilities
+            G_lin = G_probs[:, :, 0]  # [B, dag_depth] - linear gate weights
+            G_log = G_probs[:, :, 1]  # [B, dag_depth] - log gate weights
+            
+            # For backward compatibility, set G to be [G_lin, G_log] concatenated
+            # This preserves the original tensor structure for logging
+            G = torch.stack([G_lin, G_log], dim=-1)  # [B, dag_depth, 2]
+            G = tap(G, "dual_G_gate", self.enable_taps)
+            
+            # For computation, we'll use G_lin and G_log separately
+            # Store them as attributes for the forward computation
+            self._current_G_lin = G_lin
+            self._current_G_log = G_log
+            
+        else:
+            # Original single G mode
+            eps = 1e-5
+            G = torch.sigmoid(G_logits).to(dtype)
+            G = eps + (1.0 - 2.0 * eps) * G
+            G = tap(G, "G_gate", self.enable_taps)
+
         if self._is_nan("G (gate)", G) and self.training:
             pdb.set_trace()
-
-        if self.freeze_g_linear:
-            G = torch.ones_like(G)
-        if self.freeze_g_log:
-            G = torch.zeros_like(G)
 
         # Save raw G weights before any discretization for sparsity calculation
         raw_G = G.detach()
 
         if not self.training and not self.unfreeze_eval:
-            # Only apply eval discretization if STEs are not already handling it
-            G = (G > 0.5).to(G.dtype)
+            if self.dual_G:
+                # For dual_G, discretize by taking argmax and converting to one-hot
+                # This makes the model choose definitively between linear and log
+                max_indices = torch.argmax(G, dim=-1)  # [B, dag_depth]
+                G_discrete = torch.zeros_like(G)  # [B, dag_depth, 2]
+                G_discrete.scatter_(-1, max_indices.unsqueeze(-1), 1.0)
+                G = G_discrete
+                
+                # Update the current G values for computation
+                self._current_G_lin = G[:, :, 0]
+                self._current_G_log = G[:, :, 1]
+            else:
+                # Original discretization for single G
+                G = (G > 0.5).to(G.dtype)
             O = torch.round(O).clamp(-1.0, 1.0)
 
         return O, G, out_logits, raw_G
@@ -322,6 +419,7 @@ class DAGLayer(ExtendedTorchModule):
                 f"Expected input of shape (B, {self.in_features}), got {tuple(input.shape)}"
             )
 
+
         device = input.device
         dtype = torch.float64 if device.type != "mps" else torch.float32
         B = input.size(0)
@@ -386,7 +484,14 @@ class DAGLayer(ExtendedTorchModule):
 
         for step in range(self.dag_depth):
             O_step = O[:, step, :]
-            G_step = G[:, step].unsqueeze(-1)
+            
+            if self.dual_G:
+                # Use separate linear and log gate weights
+                G_lin_step = self._current_G_lin[:, step].unsqueeze(-1)  # [B, 1]
+                G_log_step = self._current_G_log[:, step].unsqueeze(-1)   # [B, 1]
+            else:
+                # Original single G mode
+                G_step = G[:, step].unsqueeze(-1)
 
             signed_values = working_sign * working_mag
             R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)
@@ -403,7 +508,12 @@ class DAGLayer(ExtendedTorchModule):
             m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
             log_sign = torch.cos(math.pi * m)
 
-            V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
+            if self.dual_G:
+                # Dual G: output = G_lin * linear + G_log * log
+                V_sign_new = G_lin_step * linear_sign + G_log_step * log_sign
+            else:
+                # Original: output = G * linear + (1-G) * log  
+                V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
 
             # Magnitude computation
             # Mix magnitudes in log space for gradient stability
@@ -412,60 +522,17 @@ class DAGLayer(ExtendedTorchModule):
             )  # smooth |.| to keep grads near 0
             l_lin = torch.log(torch.clamp(linear_mag, min=self._mag_min))
             l_log = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
-            m_log = l_log + G_step * (l_lin - l_log)  # convex blend in log space
-            m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
-            V_mag_new = torch.exp(m_log)
-
-            # Debug logging for troubleshooting
-            if (
-                self.enable_debug_logging and step == 0
-            ):  # Only log first step to avoid spam
-                # Compute what the ideal result should be
-                input_vals = (
-                    working_mag[0, : self.num_initial_nodes]
-                    * working_sign[0, : self.num_initial_nodes]
-                )
-                selector_vals = O_step[0, : self.num_initial_nodes]
-
-                print(f"=== DEBUG STEP {step} ===")
-                print(f"Input values: {input_vals.detach().cpu().numpy()}")
-                print(f"Selector: {selector_vals.detach().cpu().numpy()}")
-                print(
-                    f"Expected linear result: {torch.sum(selector_vals * input_vals).item():.6f}"
-                )
-                if len(input_vals) >= 2:
-                    # For division: first_input / second_input (assuming selector is [1, -1, ...])
-                    target_pattern = torch.tensor(
-                        [1.0, -1.0],
-                        device=selector_vals.device,
-                        dtype=selector_vals.dtype,
-                    )
-                    if torch.allclose(selector_vals[:2], target_pattern):
-                        expected_div = (
-                            input_vals[0] / input_vals[1]
-                            if input_vals[1].abs() > 1e-6
-                            else float("inf")
-                        )
-                        print(f"Expected division result: {expected_div.item():.6f}")
-
-                print(
-                    f"Input magnitudes: {working_mag[0, :self.num_initial_nodes].detach().cpu().numpy()}"
-                )
-                print(
-                    f"Input signs: {working_sign[0, :self.num_initial_nodes].detach().cpu().numpy()}"
-                )
-                print(f"O_step: {O_step[0].detach().cpu().numpy()}")
-                print(
-                    f"G_step: {G_step[0].item():.6f} ({'LINEAR' if G_step[0].item() > 0.5 else 'LOG'})"
-                )
-
-                print(f"Linear sign: {linear_sign[0].item():.6f}")
-                print(f"Log sign: {log_sign[0].item():.6f}")
-                print(f"Final V_sign: {V_sign_new[0].item():.6f}")
-                print(f"Linear mag: {linear_mag[0].item():.6f}")
-                print(f"Final V_mag: {V_mag_new[0].item():.6f}")
-                print(f"Final result: {(V_sign_new * V_mag_new)[0].item():.6f}")
-                print("=" * 40)
+            
+            if self.dual_G:
+                # Dual G: mix in original space then clamp
+                lin_contrib = G_lin_step * torch.exp(l_lin)
+                log_contrib = G_log_step * torch.exp(l_log) 
+                V_mag_new = torch.clamp(lin_contrib + log_contrib, min=self._mag_min, max=self._mag_max)
+            else:
+                # Original: convex blend in log space
+                m_log = l_log + G_step * (l_lin - l_log)  # convex blend in log space
+                m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
+                V_mag_new = torch.exp(m_log)
 
             # Debug: save new computed values
             self._debug_V_sign_new.append(V_sign_new.clone())
@@ -485,7 +552,8 @@ class DAGLayer(ExtendedTorchModule):
                 working_sign, f"working_sign_step_{step}", self.enable_taps
             )
 
-        self._is_nan("out_logits (output selector)", out_logits)
+        if out_logits is not None:
+            self._is_nan("out_logits (output selector)", out_logits)
 
         value_vec_inter = (working_sign * working_mag)[:, self.num_initial_nodes :]
 
@@ -504,10 +572,10 @@ class DAGLayer(ExtendedTorchModule):
         # Always save the current state for logging (captures clamping during eval)
         # Separate tracking for training vs eval states
         if self.training:
-            self._last_train_out_logits = out_logits.detach()
+            self._last_train_out_logits = out_logits.detach() if out_logits is not None else None
             self._last_train_value_vec_inter = value_vec_inter.detach()
         else:
-            self._last_eval_out_logits = out_logits.detach()
+            self._last_eval_out_logits = out_logits.detach() if out_logits is not None else None
             self._last_eval_value_vec_inter = value_vec_inter.detach()
 
         final_value = tap(final_value, "final_value", self.enable_taps)

@@ -44,6 +44,27 @@ TEST_RANGES = [
 
 OPERATIONS = ["div", "sub", "mul", "add"]
 
+# Grokking thresholds calculated using frozen perfect weights + 1e-5 perturbation
+# These represent nearly-perfect solution performance for each operation/range
+GROK_THRESHOLDS = {
+    "add": {
+        "sym": 1.25e-13, "neg": 1.25e-13, "pos": 1.25e-13, "n10": 1.01e-13,
+        "p01": 7.89e-15, "n01": 8.14e-15, "p11": 1.01e-13, "n20": 6.67e-12, "p20": 6.30e-12
+    },
+    "sub": {
+        "sym": 8.22e-14, "neg": 5.03e-14, "pos": 5.08e-14, "n10": 4.23e-14,
+        "p01": 9.83e-14, "n01": 9.83e-14, "p11": 4.37e-14, "n20": 1.40e-12, "p20": 1.38e-12
+    },
+    "mul": {
+        "sym": 7.78e-13, "neg": 7.70e-13, "pos": 7.48e-13, "n10": 6.29e-13,
+        "p01": 4.67e-15, "n01": 4.93e-15, "p11": 5.19e-13, "n20": 2.39e-09, "p20": 2.42e-09
+    },
+    "div": {
+        "sym": 3.90e-15, "neg": 3.93e-15, "pos": 3.92e-15, "n10": 5.32e-15,
+        "p01": 9.29e-15, "n01": 9.21e-15, "p11": 5.42e-15, "n20": 3.04e-15, "p20": 2.98e-15
+    }
+}
+
 
 def load_progress(progress_file):
     """Load existing progress from file."""
@@ -68,6 +89,7 @@ def get_experiment_key(seed, operation, range_name):
     return f"{seed}_{operation}_{range_name}"
 
 
+# ARGS HERE
 def run_single_test(
     operation,
     seed,
@@ -75,13 +97,14 @@ def run_single_test(
     extrap_range,
     range_name,
     show_progress=False,
-    max_iterations=50000,
+    max_iterations=2000,
     restart_iter=None,
     disable_early_stopping=False,
     batch_size=128,
     disable_logging=False,
     disable_sounds=False,
     unfreeze_eval=False,
+    dual_G=False,
 ):
     """Run a single test and return result."""
 
@@ -140,6 +163,14 @@ def run_single_test(
     # Add unfreeze eval argument if specified
     if unfreeze_eval:
         cmd.append("--unfreeze-eval")
+    
+    # Add dual-G argument if specified
+    if dual_G:
+        cmd.append("--dual-G")
+    
+    # Add operation-specific and range-specific grokking threshold
+    grok_threshold = GROK_THRESHOLDS.get(operation, {}).get(range_name, 1e-7)
+    cmd.extend(["--grok-threshold", str(grok_threshold)])
 
     # Add frozen selector arguments based on operation
     if operation in ["mul", "add"]:
@@ -483,14 +514,14 @@ def main():
     parser.add_argument(
         "--max-iterations",
         type=int,
-        default=3000,
-        help="Maximum training iterations per experiment (default: 3000)",
+        default=50000,
+        help="Maximum training iterations per experiment (default: 50000)",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=512,
-        help="Batch size for training (default: 512)",
+        default=128,
+        help="Batch size for training (default: 128)",
     )
     parser.add_argument(
         "--enable-logging",
@@ -521,6 +552,12 @@ def main():
         action="store_true",
         default=False,
         help="Use soft weights during evaluation instead of discretizing them (DAG layer only)",
+    )
+    parser.add_argument(
+        "--dual-G",
+        action="store_true",
+        default=False,
+        help="Use dual G parameterization with softmax to avoid gradient trap (DAG layer only)",
     )
     args = parser.parse_args()
 
@@ -642,6 +679,7 @@ def main():
                     args.disable_logging,
                     args.disable_sounds,
                     args.unfreeze_eval,
+                    args.dual_G,
                 )
                 results.append(result)
                 completed += 1

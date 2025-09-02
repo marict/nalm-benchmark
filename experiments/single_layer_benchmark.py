@@ -42,7 +42,7 @@ def print_dag_internal_state(
     t_val = float(t_tensor[0].detach().cpu().view(-1)[0].item())
     g_state = g_tensor[0].detach().cpu().tolist()
     o_state = o_tensor[0].detach().cpu().tolist()
-    out_logits_state = out_logits_tensor[0].detach().cpu()
+    out_logits_state = out_logits_tensor[0].detach().cpu() if out_logits_tensor is not None else None
     value_vec_inter_state = value_vec_inter_tensor[0].detach().cpu().tolist()
 
     # Handle optional sign/mag tensors
@@ -56,7 +56,20 @@ def print_dag_internal_state(
     print(f"Sample statistics ({state_label} state):")
     print(f"input={[round(x, 5) for x in x_vals]}")
     print(f"output={round(y_val, 5)}, target={round(t_val, 5)}")
-    print(f"G ({state_label.lower()}): {[round(g, 5) for g in g_state]}")
+    # Handle dual_G vs single G printing
+    if dag_layer is not None and dag_layer.dual_G and len(g_state) > 0:
+        # For dual_G: g_state is nested list [[G_lin, G_log], ...] for each dag step
+        if isinstance(g_state[0], list) and len(g_state[0]) == 2:
+            g_lin_vals = [round(step[0], 5) for step in g_state]
+            g_log_vals = [round(step[1], 5) for step in g_state]
+            print(f"G_lin ({state_label.lower()}): {g_lin_vals}")
+            print(f"G_log ({state_label.lower()}): {g_log_vals}")
+        else:
+            # Fallback if structure isn't as expected
+            print(f"G ({state_label.lower()}): {[round(g, 5) if isinstance(g, (int, float)) else g for g in g_state]}")
+    else:
+        # Original single G printing
+        print(f"G ({state_label.lower()}): {[round(g, 5) for g in g_state]}")
 
     # Get intermediate values at each step if DAG layer is available
     working_values = None
@@ -83,7 +96,16 @@ def print_dag_internal_state(
 
     for step_idx, step_values in enumerate(o_state):
         rounded_selectors = [round(v, 5) for v in step_values]
-        g_value = round(g_state[step_idx], 1) if step_idx < len(g_state) else "N/A"
+        # Handle dual_G vs single G for step-by-step printing  
+        if step_idx < len(g_state):
+            if dag_layer is not None and dag_layer.dual_G and isinstance(g_state[step_idx], list):
+                g_lin_val = round(g_state[step_idx][0], 1)
+                g_log_val = round(g_state[step_idx][1], 1) 
+                g_value = f"[{g_lin_val}, {g_log_val}]"
+            else:
+                g_value = round(g_state[step_idx], 1)
+        else:
+            g_value = "N/A"
 
         # Get intermediate values available at this step
         if working_values is not None and step_idx < len(working_values):
@@ -715,6 +737,52 @@ parser.add_argument(
     help="Use soft weights during evaluation instead of discretizing them (DAG layer only)",
 )
 
+parser.add_argument(
+    "--freeze-G-weights-log",
+    action="store_true",
+    default=False,
+    help="Initialize G weights to select log (multiplicative) domain (DAG layer only)",
+)
+
+parser.add_argument(
+    "--freeze-G-weights-lin",
+    action="store_true",
+    default=False,
+    help="Initialize G weights to select linear (additive) domain (DAG layer only)",
+)
+parser.add_argument(
+    "--dual-G",
+    action="store_true",
+    default=False,
+    help="Use dual G parameterization with softmax to avoid gradient trap (DAG layer only)",
+)
+
+parser.add_argument(
+    "--G-perturbation",
+    type=float,
+    default=0.0,
+    help="Add random ±ε perturbation to G weights for threshold calculation (default: 0.0)",
+)
+
+parser.add_argument(
+    "--freeze-input-norm",
+    action="store_true", 
+    default=False,
+    help="Freeze input norm to perfect weights: weight=1.0, bias=0.0 (identity transformation, DAG layer only)",
+)
+
+parser.add_argument(
+    "--grok-threshold",
+    type=float,
+    default=1e-13,
+    help="Grokking threshold for extrapolation error (default: 1e-7)",
+)
+parser.add_argument(
+    "--no-norm", 
+    action="store_true",
+    help="Disable input normalization (LayerNorm)",
+)
+
 
 # Compute bins for |x|
 def compute_bins(x, num_bins: int = 5):
@@ -855,6 +923,9 @@ else:
 
 utils.set_pytorch_precision(args.pytorch_precision)
 setattr(args, "cuda", torch.cuda.is_available() and not args.no_cuda)
+
+# Handle use_norm logic: default is True unless --no-norm is specified
+use_norm = not args.no_norm
 
 # Print configuration
 print(f"running")
@@ -1017,6 +1088,12 @@ model = stable_nalu.network.SingleLayerNetwork(
     freeze_O_mul=getattr(args, "freeze_O_mul", False),
     no_selector=getattr(args, "no_selector", False),
     unfreeze_eval=getattr(args, "unfreeze_eval", False),
+    freeze_G_weights_log=getattr(args, "freeze_G_weights_log", False),
+    freeze_G_weights_lin=getattr(args, "freeze_G_weights_lin", False),
+    G_perturbation=getattr(args, "G_perturbation", 0.0),
+    freeze_input_norm=getattr(args, "freeze_input_norm", False),
+    use_norm=use_norm,
+    dual_G=getattr(args, "dual_G", False),
     # Disable taps when logging is disabled
     _enable_taps=not getattr(args, "disable_logging", False),
 )
@@ -1118,7 +1195,7 @@ for epoch_i, (x_train, t_train) in progress_bar:
     # model.set_parameter("tau", max(0.5, math.exp(-1e-5 * epoch_i)))
     optimizer.zero_grad()
     log_dict = {}
-    _es_thr = 1e-7
+    _es_thr = args.grok_threshold
     PATIENCE = 100
 
     # Always check extrapolation error every iteration for accurate success tracking
@@ -1139,14 +1216,22 @@ for epoch_i, (x_train, t_train) in progress_bar:
                 if args.disable_early_stopping
                 else f"patience {patience_counter}/{PATIENCE}"
             )
+            # Compute interpolation error for success message
+            _, current_interpolation_error = compute_binned_mse(
+                dataset_valid_interpolation_data, bin_indices, "inter"
+            )
             print(
-                f"Extrapolation threshold achieved at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f} ({status_msg})"
+                f"Extrapolation threshold achieved at step {epoch_i}: inter={current_interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f} ({status_msg})"
             )
 
         # Only actually stop if early stopping is enabled and patience reached
         if not args.disable_early_stopping and patience_counter >= PATIENCE:
+            # Compute interpolation error for early stopping message
+            _, current_interpolation_error = compute_binned_mse(
+                dataset_valid_interpolation_data, bin_indices, "inter"
+            )
             print(
-                f"Early stopping at step {epoch_i}: inter={interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
+                f"Early stopping at step {epoch_i}: inter={current_interpolation_error:.10f}, extra={extrapolation_error.detach().cpu().item():.10f}"
             )
             log_dict["early_stopped"] = 1
             early_stop = True
@@ -1285,7 +1370,14 @@ for epoch_i, (x_train, t_train) in progress_bar:
 
     log_dict["lr"] = float(scheduler.get_last_lr()[0])
     if dag is not None and hasattr(dag, "_last_train_G"):
-        log_dict["mean/G"] = float(dag._last_train_G.cpu().mean().item())
+        if dag.dual_G:
+            # For dual_G: G has shape [B, dag_depth, 2] where dim=-1 is [G_lin, G_log]
+            G_tensor = dag._last_train_G.cpu()
+            log_dict["mean/G_lin"] = float(G_tensor[:, :, 0].mean().item())  # Linear gate
+            log_dict["mean/G_log"] = float(G_tensor[:, :, 1].mean().item())  # Log gate
+        else:
+            # Original single G logging
+            log_dict["mean/G"] = float(dag._last_train_G.cpu().mean().item())
         o_l1_mean = float(dag._last_train_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
 
@@ -1315,7 +1407,7 @@ for epoch_i, (x_train, t_train) in progress_bar:
         log_dict["mse/extra"] = float(extrapolation_error.detach().cpu().item())
 
         print(
-            "\ntrain %d: %.10f, inter: %.10f, extra: %.10f"
+            "\ntrain %d: %.10f, inter: %.2e, extra: %.2e"
             % (
                 epoch_i,
                 loss_train_criterion.detach().cpu().item(),
@@ -1326,13 +1418,7 @@ for epoch_i, (x_train, t_train) in progress_bar:
 
         # Update tqdm progress bar with current loss info
         if not args.no_open_browser:  # Only update when tqdm is enabled
-            progress_bar.set_postfix(
-                {
-                    "train": f"{loss_train_criterion.detach().cpu().item():.6f}",
-                    "inter": f"{interpolation_error:.6f}",
-                    "extra": f"{extrapolation_error.detach().cpu().item():.6f}",
-                }
-            )
+            progress_bar.set_postfix({})
 
         # Print extrapolation example after running through model to get internal state
         if dag is not None:
@@ -1377,9 +1463,7 @@ for epoch_i, (x_train, t_train) in progress_bar:
 
     if early_stop:
         print(f"Early stopped at step {epoch_i}")
-        wandb.wrapper.log(log_dict, step=epoch_i)
-        # wait a second for wandb to log
-        time.sleep(1)
+        # Don't log here - let the regular logging at end of loop handle it
         break
 
     # Optimize model
@@ -1480,7 +1564,7 @@ if args.disable_early_stopping:
     print(f"  - Min interpolation error: {min_interpolation_error:.10f}")
     print(f"  - Min extrapolation error: {min_extrapolation_error:.10f}")
     print(
-        f"  - Extrapolation threshold (1e-7): {'✓ PASSED' if success_achieved else '✗ FAILED'}"
+        f"  - Extrapolation threshold ({args.grok_threshold:.2e}): {'✓ PASSED' if success_achieved else '✗ FAILED'}"
     )
     if success_achieved:
         print(f"  - Success achieved at step: {success_at_step}")
