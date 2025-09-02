@@ -46,50 +46,51 @@ OPERATIONS = ["div", "sub", "mul", "add"]
 
 # Grokking thresholds calculated using frozen perfect weights + 1e-5 perturbation
 # These represent nearly-perfect solution performance for each operation/range
+# 6.19e-09 was the smallest threshold identified with 1e-4 perturbation
 GROK_THRESHOLDS = {
     "add": {
-        "sym": 1.25e-13,
-        "neg": 1.25e-13,
-        "pos": 1.25e-13,
-        "n10": 1.01e-13,
-        "p01": 7.89e-15,
-        "n01": 8.14e-15,
-        "p11": 1.01e-13,
-        "n20": 6.67e-12,
-        "p20": 6.30e-12,
+        "sym": 6.19e-09,
+        "neg": 6.19e-09,
+        "pos": 6.19e-09,
+        "n10": 6.19e-09,
+        "p01": 6.19e-09,
+        "n01": 6.19e-09,
+        "p11": 6.19e-09,
+        "n20": 6.19e-09,
+        "p20": 6.19e-09,
     },
     "sub": {
-        "sym": 8.22e-14,
-        "neg": 5.03e-14,
-        "pos": 5.08e-14,
-        "n10": 4.23e-14,
-        "p01": 9.83e-14,
-        "n01": 9.83e-14,
-        "p11": 4.37e-14,
-        "n20": 1.40e-12,
-        "p20": 1.38e-12,
+        "sym": 6.19e-09,
+        "neg": 6.19e-09,
+        "pos": 6.19e-09,
+        "n10": 6.19e-09,
+        "p01": 6.19e-09,
+        "n01": 6.19e-09,
+        "p11": 6.19e-09,
+        "n20": 6.19e-09,
+        "p20": 6.19e-09,
     },
     "mul": {
-        "sym": 7.78e-13,
-        "neg": 7.70e-13,
-        "pos": 7.48e-13,
-        "n10": 6.29e-13,
-        "p01": 4.67e-15,
-        "n01": 4.93e-15,
-        "p11": 5.19e-13,
-        "n20": 2.39e-09,
-        "p20": 2.42e-09,
+        "sym": 6.19e-09,
+        "neg": 6.19e-09,
+        "pos": 6.19e-09,
+        "n10": 6.19e-09,
+        "p01": 6.19e-09,
+        "n01": 6.19e-09,
+        "p11": 6.19e-09,
+        "n20": 6.19e-09,
+        "p20": 6.19e-09,
     },
     "div": {
-        "sym": 3.90e-15,
-        "neg": 3.93e-15,
-        "pos": 3.92e-15,
-        "n10": 5.32e-15,
-        "p01": 9.29e-15,
-        "n01": 9.21e-15,
-        "p11": 5.42e-15,
-        "n20": 3.04e-15,
-        "p20": 2.98e-15,
+        "sym": 6.19e-09,
+        "neg": 6.19e-09,
+        "pos": 6.19e-09,
+        "n10": 6.19e-09,
+        "p01": 6.19e-09,
+        "n01": 6.19e-09,
+        "p11": 6.19e-09,
+        "n20": 6.19e-09,
+        "p20": 6.19e-09,
     },
 }
 
@@ -132,7 +133,6 @@ def run_single_test(
     disable_logging=False,
     disable_sounds=False,
     unfreeze_eval=False,
-    dual_G=False,
 ):
     """Run a single test and return result."""
 
@@ -192,21 +192,14 @@ def run_single_test(
     if unfreeze_eval:
         cmd.append("--unfreeze-eval")
 
-    # Add dual-G argument if specified
-    if dual_G:
-        cmd.append("--dual-G")
-
     # Add operation-specific and range-specific grokking threshold
     grok_threshold = GROK_THRESHOLDS.get(operation, {}).get(range_name, 1e-7)
     cmd.extend(["--grok-threshold", str(grok_threshold)])
 
-    # Add frozen selector arguments based on operation
-    if operation in ["mul", "add"]:
-        cmd.append("--freeze-O-mul")
-        frozen_config = "freeze_O_mul=True"
-    elif operation in ["sub", "div"]:
-        cmd.append("--freeze-O-div")
-        frozen_config = "freeze_O_div=True"
+    # Add frozen arguments using new simplified interface
+    cmd.extend(["--op", operation])
+    cmd.append("--freeze-O")
+    frozen_config = f"op={operation}, freeze_O=True, freeze_G=True"
 
     try:
         start_time = time.time()
@@ -581,12 +574,6 @@ def main():
         default=False,
         help="Use soft weights during evaluation instead of discretizing them (DAG layer only)",
     )
-    parser.add_argument(
-        "--dual-G",
-        action="store_true",
-        default=False,
-        help="Use dual G parameterization with softmax to avoid gradient trap (DAG layer only)",
-    )
     args = parser.parse_args()
 
     # Set disable_logging as the inverse of enable_logging
@@ -707,7 +694,6 @@ def main():
                     args.disable_logging,
                     args.disable_sounds,
                     args.unfreeze_eval,
-                    args.dual_G,
                 )
                 results.append(result)
                 completed += 1

@@ -58,9 +58,9 @@ def print_dag_internal_state(
     print(f"Sample statistics ({state_label} state):")
     print(f"input={[round(x, 5) for x in x_vals]}")
     print(f"output={round(y_val, 5)}, target={round(t_val, 5)}")
-    # Handle dual_G vs single G printing
-    if dag_layer is not None and dag_layer.dual_G and len(g_state) > 0:
-        # For dual_G: g_state is nested list [[G_lin, G_log], ...] for each dag step
+    # Always use dual_G printing format (now default)
+    if len(g_state) > 0:
+        # g_state is nested list [[G_lin, G_log], ...] for each dag step
         if isinstance(g_state[0], list) and len(g_state[0]) == 2:
             g_lin_vals = [round(step[0], 5) for step in g_state]
             g_log_vals = [round(step[1], 5) for step in g_state]
@@ -71,9 +71,6 @@ def print_dag_internal_state(
             print(
                 f"G ({state_label.lower()}): {[round(g, 5) if isinstance(g, (int, float)) else g for g in g_state]}"
             )
-    else:
-        # Original single G printing
-        print(f"G ({state_label.lower()}): {[round(g, 5) for g in g_state]}")
 
     # Get intermediate values at each step if DAG layer is available
     working_values = None
@@ -100,18 +97,19 @@ def print_dag_internal_state(
 
     for step_idx, step_values in enumerate(o_state):
         rounded_selectors = [round(v, 5) for v in step_values]
-        # Handle dual_G vs single G for step-by-step printing
+        # Always use dual_G format for step-by-step printing (now default)
         if step_idx < len(g_state):
-            if (
-                dag_layer is not None
-                and dag_layer.dual_G
-                and isinstance(g_state[step_idx], list)
-            ):
+            if isinstance(g_state[step_idx], list) and len(g_state[step_idx]) == 2:
                 g_lin_val = round(g_state[step_idx][0], 1)
                 g_log_val = round(g_state[step_idx][1], 1)
                 g_value = f"[{g_lin_val}, {g_log_val}]"
             else:
-                g_value = round(g_state[step_idx], 1)
+                # Fallback for unexpected format
+                g_value = (
+                    round(g_state[step_idx], 1)
+                    if isinstance(g_state[step_idx], (int, float))
+                    else str(g_state[step_idx])
+                )
         else:
             g_value = "N/A"
 
@@ -216,6 +214,14 @@ parser.add_argument(
     choices=["add", "sub", "mul", "div"],
     type=str,
     help="Specify the operation to use, e.g. add, mul, squared",
+)
+parser.add_argument(
+    "--op",
+    action="store",
+    default=None,
+    choices=["add", "sub", "mul", "div"],
+    type=str,
+    help="Operation type for DAG layer freezing (defaults to --operation value if not specified)",
 )
 parser.add_argument(
     "--num-subsets",
@@ -696,17 +702,10 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--freeze-O-div",
+    "--freeze-O",
     action="store_true",
     default=False,
-    help="Freeze O selectors for division pattern [1, -1, 0, ...] (DAG layer only)",
-)
-
-parser.add_argument(
-    "--freeze-O-mul",
-    action="store_true",
-    default=False,
-    help="Freeze O selectors for multiplication pattern [1, 1, 0, ...] (DAG layer only)",
+    help="Freeze O selectors to perfect pattern based on operation (DAG layer only)",
 )
 
 parser.add_argument(
@@ -746,23 +745,10 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--freeze-G-weights-log",
+    "--freeze-G",
     action="store_true",
     default=False,
-    help="Initialize G weights to select log (multiplicative) domain (DAG layer only)",
-)
-
-parser.add_argument(
-    "--freeze-G-weights-lin",
-    action="store_true",
-    default=False,
-    help="Initialize G weights to select linear (additive) domain (DAG layer only)",
-)
-parser.add_argument(
-    "--dual-G",
-    action="store_true",
-    default=False,
-    help="Use dual G parameterization with softmax to avoid gradient trap (DAG layer only)",
+    help="Freeze G values to perfect domain based on operation (DAG layer only)",
 )
 
 parser.add_argument(
@@ -1009,8 +995,9 @@ print(f"  - reinit_max_stored_losses: {args.reinit_max_stored_losses}")
 print(f"  - reinit_loss_thr: {args.reinit_loss_thr}")
 print(f"  - num_bins: {args.num_bins}")
 print(f"  -")
-print(f"  - freeze_O_div: {args.freeze_O_div}")
-print(f"  - freeze_O_mul: {args.freeze_O_mul}")
+print(f"  - op: {getattr(args, 'op', None) or args.operation}")
+print(f"  - freeze_O: {getattr(args, 'freeze_O', False)}")
+print(f"  - freeze_G: {getattr(args, 'freeze_G', False)}")
 print(f"  - no_selector: {args.no_selector}")
 print(f"  - dag_depth: {args.dag_depth}")
 print(f"  -")
@@ -1091,17 +1078,16 @@ model = stable_nalu.network.SingleLayerNetwork(
     nru_div_mode=args.nru_div_mode,
     realnpu_reg_type=args.realnpu_reg_type,
     dag_depth=args.dag_depth,
-    # DAG-specific frozen selector arguments
-    freeze_O_div=getattr(args, "freeze_O_div", False),
-    freeze_O_mul=getattr(args, "freeze_O_mul", False),
+    # DAG-specific arguments
+    op=getattr(args, "op", None)
+    or args.operation,  # Default to operation if op not specified
+    freeze_O=getattr(args, "freeze_O", False),
+    freeze_G=getattr(args, "freeze_G", False),
     no_selector=getattr(args, "no_selector", False),
     unfreeze_eval=getattr(args, "unfreeze_eval", False),
-    freeze_G_weights_log=getattr(args, "freeze_G_weights_log", False),
-    freeze_G_weights_lin=getattr(args, "freeze_G_weights_lin", False),
     G_perturbation=getattr(args, "G_perturbation", 0.0),
     freeze_input_norm=getattr(args, "freeze_input_norm", False),
     use_norm=use_norm,
-    dual_G=getattr(args, "dual_G", False),
     # Disable taps when logging is disabled
     _enable_taps=not getattr(args, "disable_logging", False),
 )
@@ -1378,16 +1364,11 @@ for epoch_i, (x_train, t_train) in progress_bar:
 
     log_dict["lr"] = float(scheduler.get_last_lr()[0])
     if dag is not None and hasattr(dag, "_last_train_G"):
-        if dag.dual_G:
-            # For dual_G: G has shape [B, dag_depth, 2] where dim=-1 is [G_lin, G_log]
-            G_tensor = dag._last_train_G.cpu()
-            log_dict["mean/G_lin"] = float(
-                G_tensor[:, :, 0].mean().item()
-            )  # Linear gate
-            log_dict["mean/G_log"] = float(G_tensor[:, :, 1].mean().item())  # Log gate
-        else:
-            # Original single G logging
-            log_dict["mean/G"] = float(dag._last_train_G.cpu().mean().item())
+        # Always use dual_G logging format (now default)
+        # G has shape [B, dag_depth, 2] where dim=-1 is [G_lin, G_log]
+        G_tensor = dag._last_train_G.cpu()
+        log_dict["mean/G_lin"] = float(G_tensor[:, :, 0].mean().item())  # Linear gate
+        log_dict["mean/G_log"] = float(G_tensor[:, :, 1].mean().item())  # Log gate
         o_l1_mean = float(dag._last_train_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
 

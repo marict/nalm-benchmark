@@ -28,53 +28,32 @@ from stable_nalu.layer import DAGLayer
 
 # Test ranges from comprehensive_table_test.py
 TEST_RANGES = [
-    ([-2, 2], [[-6, -2], [2, 6]], "sym"),  # Match your training command exactly
+    ([-2, 2], [[-6, -2], [2, 6]], "sym"),  # symmetric around 0
+    ([-0.2, -0.1], [-2, -0.2], "n01"),  # negative small (-0.2 to -0.1)
+    ([10, 20], [20, 40], "p20"),  # positive large (10-20)
 ]
 
-OPERATIONS = ["mul"]  # Test just MUL to compare
+OPERATIONS = ["add", "sub", "mul", "div"]  # Test all operations
 
-# Frozen weight configurations for perfect weights
-FREEZE_CONFIGS = {
-    "add": {
-        "freeze_O_mul": True,
-        "freeze_O_div": False,
-        "freeze_G_weights_log": False,
-        "freeze_G_weights_lin": True,
-    },
-    "sub": {
-        "freeze_O_mul": False,
-        "freeze_O_div": True,
-        "freeze_G_weights_log": False,
-        "freeze_G_weights_lin": True,
-    },
-    "mul": {
-        "freeze_O_mul": True,
-        "freeze_O_div": False,
-        "freeze_G_weights_log": True,
-        "freeze_G_weights_lin": False,
-    },
-    "div": {
-        "freeze_O_mul": False,
-        "freeze_O_div": True,
-        "freeze_G_weights_log": True,
-        "freeze_G_weights_lin": False,
-    },
+# Simple freeze configuration - now we just need op, freeze_G, and freeze_O
+FREEZE_CONFIG = {
+    "freeze_O": True,
+    "freeze_G": True,
 }
 
-# Paper uses ε = 10e-5 = 1e-4
+# Use moderate perturbation for realistic thresholds
 PERTURBATION = 1e-4
 
 
-def create_perfect_dag_layer(operation, config):
+def create_perfect_dag_layer(operation):
     """Create DAG layer with perfect frozen weights."""
     layer = DAGLayer(
         in_features=2,
         out_features=1,
         dag_depth=1,
-        freeze_O_mul=config["freeze_O_mul"],
-        freeze_O_div=config["freeze_O_div"],
-        freeze_G_weights_log=config["freeze_G_weights_log"],
-        freeze_G_weights_lin=config["freeze_G_weights_lin"],
+        op=operation,
+        freeze_O=FREEZE_CONFIG["freeze_O"],
+        freeze_G=FREEZE_CONFIG["freeze_G"],
         freeze_input_norm=False,  # Match --no-norm from training
         use_norm=False,  # Disable input norm completely
         G_perturbation=0.0,  # No perturbation for perfect weights
@@ -83,21 +62,21 @@ def create_perfect_dag_layer(operation, config):
     return layer
 
 
-def create_perturbed_dag_layer(operation, config, perturbation):
+def create_perturbed_dag_layer(operation, perturbation):
     """Create DAG layer with perturbed weights."""
     layer = DAGLayer(
         in_features=2,
         out_features=1,
         dag_depth=1,
-        freeze_O_mul=config["freeze_O_mul"],
-        freeze_O_div=config["freeze_O_div"],
-        freeze_G_weights_log=config["freeze_G_weights_log"],
-        freeze_G_weights_lin=config["freeze_G_weights_lin"],
+        op=operation,
+        freeze_O=FREEZE_CONFIG["freeze_O"],
+        freeze_G=FREEZE_CONFIG["freeze_G"],
         freeze_input_norm=False,  # Match --no-norm from training
         use_norm=False,  # Disable input norm completely
         G_perturbation=perturbation,
     )
-    layer.eval()
+    # Keep in training mode to use soft G values with perturbation
+    layer.train()
     return layer
 
 
@@ -123,12 +102,11 @@ def generate_test_data(extrap_range, n_samples=1_000_000, batch_size=10000):
 
 def calculate_threshold_mse(operation, interp_range, extrap_range, range_name):
     """Calculate threshold MSE using paper's W* ± ε methodology on 1M samples."""
-    config = FREEZE_CONFIGS[operation]
 
     try:
         # Create perfect and perturbed models
-        perfect_layer = create_perfect_dag_layer(operation, config)
-        perturbed_layer = create_perturbed_dag_layer(operation, config, PERTURBATION)
+        perfect_layer = create_perfect_dag_layer(operation)
+        perturbed_layer = create_perturbed_dag_layer(operation, PERTURBATION)
 
         # Generate test data
         print(f"    Generating 1M test samples...", end="", flush=True)
@@ -188,11 +166,10 @@ def main():
     print("=" * 60)
     print(f"Using paper methodology: W* ± ε where ε = {PERTURBATION}")
     print("Batched inference on 1M samples per test")
-    print("\nConfigurations:")
-    for op, config in FREEZE_CONFIGS.items():
-        freeze_o = "O_mul" if config["freeze_O_mul"] else "O_div"
-        freeze_g = "G_log" if config["freeze_G_weights_log"] else "G_lin"
-        print(f"  {op.upper()}: {freeze_o} + {freeze_g}")
+    print(
+        f"\nUsing simplified freezing: freeze_O={FREEZE_CONFIG['freeze_O']}, freeze_G={FREEZE_CONFIG['freeze_G']}"
+    )
+    print("Operation-specific patterns determined automatically by op parameter")
     print()
 
     results = {}
