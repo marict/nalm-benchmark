@@ -48,21 +48,49 @@ OPERATIONS = ["div", "sub", "mul", "add"]
 # These represent nearly-perfect solution performance for each operation/range
 GROK_THRESHOLDS = {
     "add": {
-        "sym": 1.25e-13, "neg": 1.25e-13, "pos": 1.25e-13, "n10": 1.01e-13,
-        "p01": 7.89e-15, "n01": 8.14e-15, "p11": 1.01e-13, "n20": 6.67e-12, "p20": 6.30e-12
+        "sym": 1.25e-13,
+        "neg": 1.25e-13,
+        "pos": 1.25e-13,
+        "n10": 1.01e-13,
+        "p01": 7.89e-15,
+        "n01": 8.14e-15,
+        "p11": 1.01e-13,
+        "n20": 6.67e-12,
+        "p20": 6.30e-12,
     },
     "sub": {
-        "sym": 8.22e-14, "neg": 5.03e-14, "pos": 5.08e-14, "n10": 4.23e-14,
-        "p01": 9.83e-14, "n01": 9.83e-14, "p11": 4.37e-14, "n20": 1.40e-12, "p20": 1.38e-12
+        "sym": 8.22e-14,
+        "neg": 5.03e-14,
+        "pos": 5.08e-14,
+        "n10": 4.23e-14,
+        "p01": 9.83e-14,
+        "n01": 9.83e-14,
+        "p11": 4.37e-14,
+        "n20": 1.40e-12,
+        "p20": 1.38e-12,
     },
     "mul": {
-        "sym": 7.78e-13, "neg": 7.70e-13, "pos": 7.48e-13, "n10": 6.29e-13,
-        "p01": 4.67e-15, "n01": 4.93e-15, "p11": 5.19e-13, "n20": 2.39e-09, "p20": 2.42e-09
+        "sym": 7.78e-13,
+        "neg": 7.70e-13,
+        "pos": 7.48e-13,
+        "n10": 6.29e-13,
+        "p01": 4.67e-15,
+        "n01": 4.93e-15,
+        "p11": 5.19e-13,
+        "n20": 2.39e-09,
+        "p20": 2.42e-09,
     },
     "div": {
-        "sym": 3.90e-15, "neg": 3.93e-15, "pos": 3.92e-15, "n10": 5.32e-15,
-        "p01": 9.29e-15, "n01": 9.21e-15, "p11": 5.42e-15, "n20": 3.04e-15, "p20": 2.98e-15
-    }
+        "sym": 3.90e-15,
+        "neg": 3.93e-15,
+        "pos": 3.92e-15,
+        "n10": 5.32e-15,
+        "p01": 9.29e-15,
+        "n01": 9.21e-15,
+        "p11": 5.42e-15,
+        "n20": 3.04e-15,
+        "p20": 2.98e-15,
+    },
 }
 
 
@@ -163,11 +191,11 @@ def run_single_test(
     # Add unfreeze eval argument if specified
     if unfreeze_eval:
         cmd.append("--unfreeze-eval")
-    
+
     # Add dual-G argument if specified
     if dual_G:
         cmd.append("--dual-G")
-    
+
     # Add operation-specific and range-specific grokking threshold
     grok_threshold = GROK_THRESHOLDS.get(operation, {}).get(range_name, 1e-7)
     cmd.extend(["--grok-threshold", str(grok_threshold)])

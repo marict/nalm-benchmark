@@ -42,7 +42,9 @@ def print_dag_internal_state(
     t_val = float(t_tensor[0].detach().cpu().view(-1)[0].item())
     g_state = g_tensor[0].detach().cpu().tolist()
     o_state = o_tensor[0].detach().cpu().tolist()
-    out_logits_state = out_logits_tensor[0].detach().cpu() if out_logits_tensor is not None else None
+    out_logits_state = (
+        out_logits_tensor[0].detach().cpu() if out_logits_tensor is not None else None
+    )
     value_vec_inter_state = value_vec_inter_tensor[0].detach().cpu().tolist()
 
     # Handle optional sign/mag tensors
@@ -66,7 +68,9 @@ def print_dag_internal_state(
             print(f"G_log ({state_label.lower()}): {g_log_vals}")
         else:
             # Fallback if structure isn't as expected
-            print(f"G ({state_label.lower()}): {[round(g, 5) if isinstance(g, (int, float)) else g for g in g_state]}")
+            print(
+                f"G ({state_label.lower()}): {[round(g, 5) if isinstance(g, (int, float)) else g for g in g_state]}"
+            )
     else:
         # Original single G printing
         print(f"G ({state_label.lower()}): {[round(g, 5) for g in g_state]}")
@@ -96,11 +100,15 @@ def print_dag_internal_state(
 
     for step_idx, step_values in enumerate(o_state):
         rounded_selectors = [round(v, 5) for v in step_values]
-        # Handle dual_G vs single G for step-by-step printing  
+        # Handle dual_G vs single G for step-by-step printing
         if step_idx < len(g_state):
-            if dag_layer is not None and dag_layer.dual_G and isinstance(g_state[step_idx], list):
+            if (
+                dag_layer is not None
+                and dag_layer.dual_G
+                and isinstance(g_state[step_idx], list)
+            ):
                 g_lin_val = round(g_state[step_idx][0], 1)
-                g_log_val = round(g_state[step_idx][1], 1) 
+                g_log_val = round(g_state[step_idx][1], 1)
                 g_value = f"[{g_lin_val}, {g_log_val}]"
             else:
                 g_value = round(g_state[step_idx], 1)
@@ -766,7 +774,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--freeze-input-norm",
-    action="store_true", 
+    action="store_true",
     default=False,
     help="Freeze input norm to perfect weights: weight=1.0, bias=0.0 (identity transformation, DAG layer only)",
 )
@@ -778,7 +786,7 @@ parser.add_argument(
     help="Grokking threshold for extrapolation error (default: 1e-7)",
 )
 parser.add_argument(
-    "--no-norm", 
+    "--no-norm",
     action="store_true",
     help="Disable input normalization (LayerNorm)",
 )
@@ -1373,7 +1381,9 @@ for epoch_i, (x_train, t_train) in progress_bar:
         if dag.dual_G:
             # For dual_G: G has shape [B, dag_depth, 2] where dim=-1 is [G_lin, G_log]
             G_tensor = dag._last_train_G.cpu()
-            log_dict["mean/G_lin"] = float(G_tensor[:, :, 0].mean().item())  # Linear gate
+            log_dict["mean/G_lin"] = float(
+                G_tensor[:, :, 0].mean().item()
+            )  # Linear gate
             log_dict["mean/G_log"] = float(G_tensor[:, :, 1].mean().item())  # Log gate
         else:
             # Original single G logging
