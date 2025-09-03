@@ -91,6 +91,7 @@ class DAGLayer(ExtendedTorchModule):
         freeze_input_norm: bool = False,
         use_norm: bool = True,
         single_G: bool = False,
+        epsilon_smooth: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -119,6 +120,7 @@ class DAGLayer(ExtendedTorchModule):
         self.freeze_input_norm = bool(freeze_input_norm)
         self.use_norm = bool(use_norm)
         self.single_G = bool(single_G)
+        self.epsilon_smooth = bool(epsilon_smooth)
 
         head_input_size = in_features
 
@@ -131,14 +133,6 @@ class DAGLayer(ExtendedTorchModule):
         # Add normalization layers (gated behind flag)
         if self.use_norm:
             self.input_norm = nn.LayerNorm(in_features)
-            self.extra_norm = nn.LayerNorm(in_features)
-            self.extra_norm1 = nn.LayerNorm(in_features)
-            self.extra_norm2 = nn.LayerNorm(in_features)
-            self.extra_norm3 = nn.LayerNorm(in_features)
-            self.extra_norm4 = nn.LayerNorm(in_features)
-            self.extra_norm5 = nn.LayerNorm(in_features)
-
-
 
             # Freeze input norm parameters if specified
             if self.freeze_input_norm:
@@ -250,7 +244,13 @@ class DAGLayer(ExtendedTorchModule):
 
         if self.single_G:
             # Single G mode: G_logits has shape [B, dag_depth]
-            G_single = torch.sigmoid(G_logits)  # [B, dag_depth] - raw sigmoid, no epsilon smoothing
+            G_single = torch.sigmoid(G_logits)  # [B, dag_depth]
+            
+            if self.epsilon_smooth:
+                # Apply epsilon smoothing like working version for training stability
+                eps = 1e-5
+                G_single = eps + (1.0 - 2.0 * eps) * G_single  # Map [0,1] to [1e-5, 1-1e-5]
+            
             # Store G_single directly - we'll use it in the forward pass
             G_lin = G_single  # [B, dag_depth] - this IS the gate value 
             G_log = 1.0 - G_single  # [B, dag_depth] - complement (for logging compatibility)
@@ -285,8 +285,8 @@ class DAGLayer(ExtendedTorchModule):
                     f"Unknown operation '{self.op}' for freeze_G. Must be one of: add, sub, mul, div"
                 )
 
-        # Apply G perturbation after freezing (if specified)
-        if self.G_perturbation != 0.0:
+        # Apply G perturbation after freezing (if specified) - only during eval for threshold calculation
+        if self.G_perturbation != 0.0 and not self.training:
             if self.op in ["add", "sub"]:
                 # Linear operations: perturb G_lin down (away from 1.0) and G_log up (away from 0.0)
                 G_lin = (

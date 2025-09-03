@@ -789,6 +789,12 @@ parser.add_argument(
     help="Use single G gate instead of dual G gates (reverts to pre-dual G behavior, DAG layer only)",
 )
 parser.add_argument(
+    "--epsilon-smooth",
+    action="store_true",
+    default=False,
+    help="Apply epsilon smoothing to single G gate values for training stability (DAG layer only)",
+)
+parser.add_argument(
     "--range",
     action="store",
     default=None,
@@ -1120,6 +1126,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     freeze_input_norm=getattr(args, "freeze_input_norm", False),
     use_norm=use_norm,
     single_G=getattr(args, "single_G", False),
+    epsilon_smooth=getattr(args, "epsilon_smooth", False),
     # Disable taps when logging is disabled
     _enable_taps=not getattr(args, "disable_logging", False),
 )
