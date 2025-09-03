@@ -80,7 +80,7 @@ class DAGLayer(ExtendedTorchModule):
         writer: str = None,
         name: str | None = None,
         _enable_debug_logging: bool = False,
-        _enable_taps: bool = True,
+        _enable_taps: bool = False,
         _do_not_predict_weights: bool = False,
         op: str = None,
         freeze_G: bool = False,
@@ -191,12 +191,6 @@ class DAGLayer(ExtendedTorchModule):
 
         if self.use_norm:
             head_input = self.input_norm(head_input)
-            head_input = self.extra_norm(head_input)
-            head_input = self.extra_norm1(head_input)
-            head_input = self.extra_norm2(head_input)
-            head_input = self.extra_norm3(head_input)
-            head_input = self.extra_norm4(head_input)
-            head_input = self.extra_norm5(head_input)
 
         O_mag_flat = self.O_mag_head(head_input)
         O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
@@ -256,11 +250,10 @@ class DAGLayer(ExtendedTorchModule):
 
         if self.single_G:
             # Single G mode: G_logits has shape [B, dag_depth]
-            # Apply sigmoid to get gate values between 0 and 1
-            G_single = torch.sigmoid(G_logits)  # [B, dag_depth]
-            # For single G, we use the same value for both lin and log mixing
-            G_lin = G_single  # [B, dag_depth]
-            G_log = 1.0 - G_single  # [B, dag_depth] - complement for log domain
+            G_single = torch.sigmoid(G_logits)  # [B, dag_depth] - raw sigmoid, no epsilon smoothing
+            # Store G_single directly - we'll use it in the forward pass
+            G_lin = G_single  # [B, dag_depth] - this IS the gate value 
+            G_log = 1.0 - G_single  # [B, dag_depth] - complement (for logging compatibility)
         else:
             # Dual G mode: G_logits has shape [B, dag_depth*2]
             # Reshape to [B, dag_depth, 2] for softmax over the 2 gate types
@@ -504,8 +497,14 @@ class DAGLayer(ExtendedTorchModule):
             m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
             log_sign = torch.cos(math.pi * m)
 
-            # Dual G: output = G_lin * linear + G_log * log
-            V_sign_new = G_lin_step * linear_sign + G_log_step * log_sign
+            # Mix signs based on gate mode
+            if self.single_G:
+                # Single G: convex blend (matching working version)
+                G_step = G_lin_step  # G_single stored in G_lin
+                V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
+            else:
+                # Dual G: weighted combination
+                V_sign_new = G_lin_step * linear_sign + G_log_step * log_sign
 
             # Magnitude computation
             # Mix magnitudes in log space for gradient stability
@@ -515,12 +514,17 @@ class DAGLayer(ExtendedTorchModule):
             l_lin = torch.log(torch.clamp(linear_mag, min=self._mag_min))
             l_log = self.soft_clamp(R_log, min=-self._log_lim, max=self._log_lim)
 
-            # Dual G: mix in original space then clamp
-            lin_contrib = G_lin_step * torch.exp(l_lin)
-            log_contrib = G_log_step * torch.exp(l_log)
-            V_mag_new = torch.clamp(
-                lin_contrib + log_contrib, min=self._mag_min, max=self._mag_max
-            )
+            # Use convex blend in log space (matching working version)
+            if self.single_G:
+                # Single G: convex blend in log space with G_single as the blend factor
+                G_step = G_lin_step  # G_single stored in G_lin
+                m_log = l_log + G_step * (l_lin - l_log)  # Direct interpolation in log space
+            else:
+                # Dual G: use weighted combination in log space
+                m_log = G_log_step * l_log + G_lin_step * l_lin
+            
+            m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
+            V_mag_new = torch.exp(m_log)
 
             # Debug: save new computed values
             self._debug_V_sign_new.append(V_sign_new.clone())
