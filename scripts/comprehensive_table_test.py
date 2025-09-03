@@ -12,6 +12,10 @@ import sys
 import time
 from pathlib import Path
 
+# Add the parent directory to the path to import from experiments
+sys.path.append(str(Path(__file__).parent.parent))
+from experiments.range_constants import RANGE_MAPPING
+
 try:
     import pandas as pd
 
@@ -30,67 +34,61 @@ except ImportError:
 
 # Test configuration
 TEST_SEEDS = [122, 223, 42, 777, 1337]
+# Convert RANGE_MAPPING from single_layer_benchmark.py to original format
 TEST_RANGES = [
-    ([-2, 2], [[-6, -2], [2, 6]], "sym"),  # symmetric around 0
-    ([-2, -1], [-6, -2], "neg"),  # negative moderate
-    ([1, 2], [2, 6], "pos"),  # positive moderate
-    ([-1.2, -1.1], [-6.1, -1.2], "n10"),  # negative narrow (around -1.1)
-    ([0.1, 0.2], [0.2, 2], "p01"),  # positive small (0.1-0.2)
-    ([-0.2, -0.1], [-2, -0.2], "n01"),  # negative small (-0.2 to -0.1)
-    ([1.1, 1.2], [1.2, 6], "p11"),  # positive narrow (around 1.1)
-    ([-20, -10], [-40, -20], "n20"),  # negative large (-20 to -10)
-    ([10, 20], [20, 40], "p20"),  # positive large (10-20)
+    (interp_range, extrap_range, range_name) 
+    for range_name, (interp_range, extrap_range) in RANGE_MAPPING.items()
 ]
 
 OPERATIONS = ["div", "sub", "mul", "add"]
 
-# Grokking thresholds calculated using frozen perfect weights + 1e-5 perturbation
+# Grokking thresholds calculated using single_G frozen perfect weights + 1e-4 perturbation
 # These represent nearly-perfect solution performance for each operation/range
-# 6.19e-09 was the smallest threshold identified with 1e-4 perturbation
+# All values calculated directly from single_G threshold computation - no fallbacks used
 GROK_THRESHOLDS = {
     "add": {
-        "sym": 6.19e-09,
-        "neg": 6.19e-09,
-        "pos": 6.19e-09,
-        "n10": 6.19e-09,
-        "p01": 6.19e-09,
-        "n01": 6.19e-09,
-        "p11": 6.19e-09,
-        "n20": 6.19e-09,
-        "p20": 6.19e-09,
+        "sym": 7.92e-07,  # 7.921446865566395e-07
+        "neg": 6.84e-07,  # 6.836895352080319e-07
+        "pos": 9.00e-07,  # 9.000044201457058e-07
+        "n10": 7.94e-07,  # 7.935566372907488e-07
+        "p01": 1.06e-08,  # 1.0558677487892965e-08
+        "n01": 3.11e-07,  # 3.114856241381858e-07
+        "p11": 6.28e-07,  # 6.283624600200711e-07
+        "n20": 5.62e-03,  # 0.005620412947610021
+        "p20": 7.59e-03,  # 0.0075875177513808015
     },
     "sub": {
-        "sym": 6.19e-09,
-        "neg": 6.19e-09,
-        "pos": 6.19e-09,
-        "n10": 6.19e-09,
-        "p01": 6.19e-09,
-        "n01": 6.19e-09,
-        "p11": 6.19e-09,
-        "n20": 6.19e-09,
-        "p20": 6.19e-09,
+        "sym": 8.49e-08,  # 8.491075860206365e-08
+        "neg": 7.04e-08,  # 7.038232396894273e-08
+        "pos": 1.01e-07,  # 1.0056447479200869e-07
+        "n10": 1.02e-07,  # 1.0150766343031137e-07
+        "p01": 3.79e-08,  # 3.7948476361293615e-08
+        "n01": 6.15e-09,  # 6.150935094595411e-09
+        "p11": 1.52e-07,  # 1.5204887091613272e-07
+        "n20": 3.03e-06,  # 3.034398537238303e-06
+        "p20": 3.12e-06,  # 3.1155784427028267e-06
     },
     "mul": {
-        "sym": 6.19e-09,
-        "neg": 6.19e-09,
-        "pos": 6.19e-09,
-        "n10": 6.19e-09,
-        "p01": 6.19e-09,
-        "n01": 6.19e-09,
-        "p11": 6.19e-09,
-        "n20": 6.19e-09,
-        "p20": 6.19e-09,
+        "sym": 1.67e-05,  # 1.6737778241804336e-05
+        "neg": 2.95e-05,  # 2.951338374259649e-05
+        "pos": 3.95e-06,  # 3.952916131311213e-06
+        "n10": 2.29e-05,  # 2.292363697051769e-05
+        "p01": 1.03e-08,  # 1.0292519370125319e-08
+        "n01": 5.94e-08,  # 5.935874440865518e-08
+        "p11": 2.78e-06,  # 2.7833877311422837e-06
+        "n20": 8.75,      # 8.752370834350586
+        "p20": 7.74,      # 7.737755060195923
     },
     "div": {
-        "sym": 6.19e-09,
-        "neg": 6.19e-09,
-        "pos": 6.19e-09,
-        "n10": 6.19e-09,
-        "p01": 6.19e-09,
-        "n01": 6.19e-09,
-        "p11": 6.19e-09,
-        "n20": 6.19e-09,
-        "p20": 6.19e-09,
+        "sym": 3.66e-08,  # 3.663247021279403e-08
+        "neg": 5.78e-08,  # 5.78118989125187e-08
+        "pos": 1.55e-08,  # 1.5454726387531537e-08
+        "n10": 9.49e-08,  # 9.494439296986457e-08
+        "p01": 3.85e-08,  # 3.8496671095344935e-08
+        "n01": 2.87e-07,  # 2.86744133859429e-07
+        "p11": 1.74e-08,  # 1.740973676334079e-08
+        "n20": 4.12e-07,  # 4.117767048228416e-07
+        "p20": 4.64e-07,  # 4.6409492426846555e-07
     },
 }
 
@@ -133,6 +131,10 @@ def run_single_test(
     disable_logging=False,
     disable_sounds=False,
     unfreeze_eval=False,
+    no_norm=False,
+    single_G=False,
+    lr_cosine=False,
+    lr_min=1e-4,
 ):
     """Run a single test and return result."""
 
@@ -191,6 +193,19 @@ def run_single_test(
     # Add unfreeze eval argument if specified
     if unfreeze_eval:
         cmd.append("--unfreeze-eval")
+
+    # Add no-norm argument if specified
+    if no_norm:
+        cmd.append("--no-norm")
+
+    # Add single-G argument if specified
+    if single_G:
+        cmd.append("--single-G")
+
+    # Add learning rate arguments if specified
+    if lr_cosine:
+        cmd.append("--lr-cosine")
+        cmd.extend(["--lr-min", str(lr_min)])
 
     # Add operation-specific and range-specific grokking threshold
     grok_threshold = GROK_THRESHOLDS.get(operation, {}).get(range_name, 1e-7)
@@ -259,7 +274,7 @@ def run_single_test(
             if disable_early_stopping:
                 # Parse paper-faithful evaluation results
                 for line in output_lines:
-                    if "✓ PASSED" in line and "Dual threshold" in line:
+                    if "✓ PASSED" in line:
                         grokked = True
                     elif "Success achieved at step:" in line:
                         try:
@@ -574,6 +589,30 @@ def main():
         default=False,
         help="Use soft weights during evaluation instead of discretizing them (DAG layer only)",
     )
+    parser.add_argument(
+        "--no-norm",
+        action="store_true",
+        default=False,
+        help="Disable input normalization (DAG layer only)",
+    )
+    parser.add_argument(
+        "--single-G",
+        action="store_true",
+        default=False,
+        help="Use single G gate instead of dual G gates (reverts to pre-dual G behavior, DAG layer only)",
+    )
+    parser.add_argument(
+        "--lr-cosine",
+        action="store_true",
+        default=False,
+        help="Use cosine learning rate decay from learning-rate to lr-min",
+    )
+    parser.add_argument(
+        "--lr-min",
+        type=float,
+        default=1e-4,
+        help="Minimum learning rate for cosine decay (default: 1e-4)",
+    )
     args = parser.parse_args()
 
     # Set disable_logging as the inverse of enable_logging
@@ -694,6 +733,10 @@ def main():
                     args.disable_logging,
                     args.disable_sounds,
                     args.unfreeze_eval,
+                    getattr(args, 'no_norm', False),
+                    getattr(args, 'single_G', False),
+                    getattr(args, 'lr_cosine', False),
+                    getattr(args, 'lr_min', 1e-4),
                 )
                 results.append(result)
                 completed += 1

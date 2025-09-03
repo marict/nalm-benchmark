@@ -26,11 +26,17 @@ wandb.init(mode="disabled")
 from stable_nalu.dataset import SimpleFunctionStaticDataset
 from stable_nalu.layer import DAGLayer
 
-# Test ranges from comprehensive_table_test.py
+# All test ranges used in comprehensive_table_test.py
 TEST_RANGES = [
-    ([-2, 2], [[-6, -2], [2, 6]], "sym"),  # symmetric around 0
-    ([-0.2, -0.1], [-2, -0.2], "n01"),  # negative small (-0.2 to -0.1)
-    ([10, 20], [20, 40], "p20"),  # positive large (10-20)
+    ([-2, 2], [[-6, -2], [2, 6]], "sym"),     # symmetric around 0
+    ([-2, -1], [-6, -2], "neg"),              # negative moderate  
+    ([1, 2], [2, 6], "pos"),                  # positive moderate
+    ([-1.2, -1.1], [-6.1, -1.2], "n10"),     # negative narrow (around -1.1)
+    ([0.1, 0.2], [0.2, 2], "p01"),           # positive small (0.1-0.2)
+    ([-0.2, -0.1], [-2, -0.2], "n01"),       # negative small (-0.2 to -0.1)
+    ([1.1, 1.2], [1.2, 6], "p11"),           # positive narrow (around 1.1)
+    ([-20, -10], [-40, -20], "n20"),         # negative large (-20 to -10)
+    ([10, 20], [20, 40], "p20"),             # positive large (10-20)
 ]
 
 OPERATIONS = ["add", "sub", "mul", "div"]  # Test all operations
@@ -45,7 +51,7 @@ FREEZE_CONFIG = {
 PERTURBATION = 1e-4
 
 
-def create_perfect_dag_layer(operation):
+def create_perfect_dag_layer(operation, single_G=True):
     """Create DAG layer with perfect frozen weights."""
     layer = DAGLayer(
         in_features=2,
@@ -57,12 +63,13 @@ def create_perfect_dag_layer(operation):
         freeze_input_norm=False,  # Match --no-norm from training
         use_norm=False,  # Disable input norm completely
         G_perturbation=0.0,  # No perturbation for perfect weights
+        single_G=single_G,
     )
     layer.eval()
     return layer
 
 
-def create_perturbed_dag_layer(operation, perturbation):
+def create_perturbed_dag_layer(operation, perturbation, single_G=True):
     """Create DAG layer with perturbed weights."""
     layer = DAGLayer(
         in_features=2,
@@ -74,13 +81,14 @@ def create_perturbed_dag_layer(operation, perturbation):
         freeze_input_norm=False,  # Match --no-norm from training
         use_norm=False,  # Disable input norm completely
         G_perturbation=perturbation,
+        single_G=single_G,
     )
     # Keep in training mode to use soft G values with perturbation
     layer.train()
     return layer
 
 
-def generate_test_data(extrap_range, n_samples=1_000_000, batch_size=10000):
+def generate_test_data(extrap_range, n_samples=100_000, batch_size=10000):
     """Generate test data for extrapolation range."""
     if isinstance(extrap_range[0], list):
         # Handle nested ranges like [[-6, -2], [2, 6]]
@@ -105,11 +113,11 @@ def calculate_threshold_mse(operation, interp_range, extrap_range, range_name):
 
     try:
         # Create perfect and perturbed models
-        perfect_layer = create_perfect_dag_layer(operation)
-        perturbed_layer = create_perturbed_dag_layer(operation, PERTURBATION)
+        perfect_layer = create_perfect_dag_layer(operation, single_G=True)
+        perturbed_layer = create_perturbed_dag_layer(operation, PERTURBATION, single_G=True)
 
         # Generate test data
-        print(f"    Generating 1M test samples...", end="", flush=True)
+        print(f"    Generating 100K test samples...", end="", flush=True)
         test_data = generate_test_data(extrap_range)
 
         # Calculate true targets
@@ -162,10 +170,11 @@ def calculate_threshold_mse(operation, interp_range, extrap_range, range_name):
 
 
 def main():
-    print("CALCULATING GROKKING THRESHOLDS")
+    print("CALCULATING GROKKING THRESHOLDS (SINGLE G MODE)")
     print("=" * 60)
     print(f"Using paper methodology: W* ± ε where ε = {PERTURBATION}")
-    print("Batched inference on 1M samples per test")
+    print("Batched inference on 100K samples per test")
+    print("🔥 Using SINGLE G paradigm (pre-dual G behavior)")
     print(
         f"\nUsing simplified freezing: freeze_O={FREEZE_CONFIG['freeze_O']}, freeze_G={FREEZE_CONFIG['freeze_G']}"
     )
@@ -197,7 +206,7 @@ def main():
     # Save results
     output_dir = Path("experiment_results")
     output_dir.mkdir(exist_ok=True)
-    output_file = output_dir / "grokking_thresholds_paper_method.json"
+    output_file = output_dir / "grokking_thresholds_single_G.json"
 
     with open(output_file, "w") as f:
         json.dump(results, f, indent=2)

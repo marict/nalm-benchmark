@@ -20,6 +20,12 @@ from debug_utils import tap_context
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
+# Range mapping for shorthand notation - imported from range_constants
+import os
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from range_constants import RANGE_MAPPING
+
 
 def print_dag_internal_state(
     x_tensor,
@@ -776,6 +782,20 @@ parser.add_argument(
     action="store_true",
     help="Disable input normalization (LayerNorm)",
 )
+parser.add_argument(
+    "--single-G",
+    action="store_true",
+    default=False,
+    help="Use single G gate instead of dual G gates (reverts to pre-dual G behavior, DAG layer only)",
+)
+parser.add_argument(
+    "--range",
+    action="store",
+    default=None,
+    choices=list(RANGE_MAPPING.keys()),
+    type=str,
+    help="Use predefined range shorthand (overrides --interpolation-range and --extrapolation-range)",
+)
 
 
 # Compute bins for |x|
@@ -882,6 +902,16 @@ def seed_torch(seed):
 
 
 args = parser.parse_args()
+
+# Override interpolation and extrapolation ranges if --range is provided
+if args.range is not None:
+    if args.range in RANGE_MAPPING:
+        interp_range, extrap_range = RANGE_MAPPING[args.range]
+        args.interpolation_range = interp_range
+        args.extrapolation_range = extrap_range
+        print(f"Using range shorthand '{args.range}': interp={interp_range}, extrap={extrap_range}")
+    else:
+        raise ValueError(f"Unknown range shorthand: {args.range}")
 
 # Enable no_selector by default if dag_depth is 1
 # Check if --no-selector was explicitly provided in command line args
@@ -998,6 +1028,7 @@ print(f"  -")
 print(f"  - op: {getattr(args, 'op', None) or args.operation}")
 print(f"  - freeze_O: {getattr(args, 'freeze_O', False)}")
 print(f"  - freeze_G: {getattr(args, 'freeze_G', False)}")
+print(f"  - single_G: {getattr(args, 'single_G', False)}")
 print(f"  - no_selector: {args.no_selector}")
 print(f"  - dag_depth: {args.dag_depth}")
 print(f"  -")
@@ -1088,6 +1119,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     G_perturbation=getattr(args, "G_perturbation", 0.0),
     freeze_input_norm=getattr(args, "freeze_input_norm", False),
     use_norm=use_norm,
+    single_G=getattr(args, "single_G", False),
     # Disable taps when logging is disabled
     _enable_taps=not getattr(args, "disable_logging", False),
 )

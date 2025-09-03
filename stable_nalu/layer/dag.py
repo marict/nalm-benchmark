@@ -90,6 +90,7 @@ class DAGLayer(ExtendedTorchModule):
         G_perturbation: float = 0.0,
         freeze_input_norm: bool = False,
         use_norm: bool = True,
+        single_G: bool = False,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -117,18 +118,27 @@ class DAGLayer(ExtendedTorchModule):
         self.G_perturbation = float(G_perturbation)
         self.freeze_input_norm = bool(freeze_input_norm)
         self.use_norm = bool(use_norm)
+        self.single_G = bool(single_G)
 
         head_input_size = in_features
 
         self.O_mag_head = nn.Linear(head_input_size, self.dag_depth * self.total_nodes)
         self.O_sign_head = nn.Linear(head_input_size, self.dag_depth * self.total_nodes)
         # G_head: outputs 2 logits per dag step if dual_G, else 1 logit per dag step
-        g_head_output_size = self.dag_depth * 2
+        g_head_output_size = self.dag_depth if self.single_G else self.dag_depth * 2
         self.G_head = nn.Linear(head_input_size, g_head_output_size)
 
         # Add normalization layers (gated behind flag)
         if self.use_norm:
             self.input_norm = nn.LayerNorm(in_features)
+            self.extra_norm = nn.LayerNorm(in_features)
+            self.extra_norm1 = nn.LayerNorm(in_features)
+            self.extra_norm2 = nn.LayerNorm(in_features)
+            self.extra_norm3 = nn.LayerNorm(in_features)
+            self.extra_norm4 = nn.LayerNorm(in_features)
+            self.extra_norm5 = nn.LayerNorm(in_features)
+
+
 
             # Freeze input norm parameters if specified
             if self.freeze_input_norm:
@@ -181,6 +191,12 @@ class DAGLayer(ExtendedTorchModule):
 
         if self.use_norm:
             head_input = self.input_norm(head_input)
+            head_input = self.extra_norm(head_input)
+            head_input = self.extra_norm1(head_input)
+            head_input = self.extra_norm2(head_input)
+            head_input = self.extra_norm3(head_input)
+            head_input = self.extra_norm4(head_input)
+            head_input = self.extra_norm5(head_input)
 
         O_mag_flat = self.O_mag_head(head_input)
         O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
@@ -220,24 +236,14 @@ class DAGLayer(ExtendedTorchModule):
         if self.freeze_O:
             pattern = torch.zeros(self.total_nodes, device=O.device, dtype=O.dtype)
             if self.num_initial_nodes >= 2:
-                if self.op in ["add", "sub"]:
-                    if self.op == "add":
-                        # Addition pattern: [1, 1, 0, 0, 0, ...]
-                        pattern[0] = 1.0  # First input: positive
-                        pattern[1] = 1.0  # Second input: positive
-                    elif self.op == "sub":
-                        # Subtraction pattern: [1, -1, 0, 0, 0, ...]
-                        pattern[0] = 1.0  # First input: positive
-                        pattern[1] = -1.0  # Second input: negative
-                elif self.op in ["mul", "div"]:
-                    if self.op == "mul":
-                        # Multiplication pattern: [1, 1, 0, 0, 0, ...]
-                        pattern[0] = 1.0  # First input: positive
-                        pattern[1] = 1.0  # Second input: positive
-                    elif self.op == "div":
-                        # Division pattern: [1, -1, 0, 0, 0, ...]
-                        pattern[0] = 1.0  # First input: positive
-                        pattern[1] = -1.0  # Second input: negative
+                if self.op in ["add", "mul"]:
+                    # Addition and multiplication pattern: [1, 1, 0, 0, 0, ...]
+                    pattern[0] = 1.0  # First input: positive
+                    pattern[1] = 1.0  # Second input: positive
+                elif self.op in ["sub", "div"]:
+                    # Subtraction and division pattern: [1, -1, 0, 0, 0, ...]
+                    pattern[0] = 1.0  # First input: positive
+                    pattern[1] = -1.0  # Second input: negative
                 else:
                     raise ValueError(
                         f"Unknown operation '{self.op}' for freeze_O. Must be one of: add, sub, mul, div"
@@ -248,23 +254,37 @@ class DAGLayer(ExtendedTorchModule):
 
         O = tap(O, "O_selector", self.enable_taps)
 
-        # Dual G mode: G_logits has shape [B, dag_depth*2]
-        # Reshape to [B, dag_depth, 2] for softmax over the 2 gate types
-        G_logits_reshaped = G_logits.view(B, self.dag_depth, 2)
-        G_probs = torch.softmax(G_logits_reshaped, dim=-1)  # [B, dag_depth, 2]
+        if self.single_G:
+            # Single G mode: G_logits has shape [B, dag_depth]
+            # Apply sigmoid to get gate values between 0 and 1
+            G_single = torch.sigmoid(G_logits)  # [B, dag_depth]
+            # For single G, we use the same value for both lin and log mixing
+            G_lin = G_single  # [B, dag_depth]
+            G_log = 1.0 - G_single  # [B, dag_depth] - complement for log domain
+        else:
+            # Dual G mode: G_logits has shape [B, dag_depth*2]
+            # Reshape to [B, dag_depth, 2] for softmax over the 2 gate types
+            G_logits_reshaped = G_logits.view(B, self.dag_depth, 2)
+            G_probs = torch.softmax(G_logits_reshaped, dim=-1)  # [B, dag_depth, 2]
 
-        # Extract linear and log gate probabilities
-        G_lin = G_probs[:, :, 0]  # [B, dag_depth] - linear gate weights
-        G_log = G_probs[:, :, 1]  # [B, dag_depth] - log gate weights
+            # Extract linear and log gate probabilities
+            G_lin = G_probs[:, :, 0]  # [B, dag_depth] - linear gate weights
+            G_log = G_probs[:, :, 1]  # [B, dag_depth] - log gate weights
 
         # Apply frozen G values if specified (override computed values)
         if self.freeze_G:
             if self.op in ["mul", "div"]:
-                # Multiplicative operations use log domain: Set G_log ≈ 1, G_lin ≈ 0
-                G_log = torch.ones_like(G_log)
-                G_lin = torch.zeros_like(G_lin)
+                # Multiplicative operations use log domain
+                if self.single_G:
+                    # Single G: set to prefer log domain (G_single → 0, so G_lin=0, G_log=1)
+                    G_lin = torch.zeros_like(G_lin)
+                    G_log = torch.ones_like(G_log)
+                else:
+                    # Dual G: Set G_log ≈ 1, G_lin ≈ 0
+                    G_log = torch.ones_like(G_log)
+                    G_lin = torch.zeros_like(G_lin)
             elif self.op in ["add", "sub"]:
-                # Additive operations use linear domain: Set G_lin ≈ 1, G_log ≈ 0
+                # Additive operations use linear domain (same for single_G and dual_G)
                 G_lin = torch.ones_like(G_lin)
                 G_log = torch.zeros_like(G_log)
             else:
@@ -298,7 +318,7 @@ class DAGLayer(ExtendedTorchModule):
             # Clamp to valid probability range [0, 1]
             G_lin = torch.clamp(G_lin, 0.0, 1.0)
             G_log = torch.clamp(G_log, 0.0, 1.0)
-
+            
         # For backward compatibility, set G to be [G_lin, G_log] concatenated
         # This preserves the original tensor structure for logging
         G = torch.stack([G_lin, G_log], dim=-1)  # [B, dag_depth, 2]
@@ -314,16 +334,26 @@ class DAGLayer(ExtendedTorchModule):
         raw_G = G.detach()
 
         if not self.training and not self.unfreeze_eval:
-            # For dual_G, discretize by taking argmax and converting to one-hot
+            if self.single_G:
+                # For single G, discretize to 0 or 1 by thresholding at 0.5
+                G_single_discrete = (self._current_G_lin > 0.5).float()
+                G_lin_discrete = G_single_discrete
+                G_log_discrete = 1.0 - G_single_discrete
+                
+                # Update current G values and reconstruct G tensor
+                self._current_G_lin = G_lin_discrete
+                self._current_G_log = G_log_discrete
+                G = torch.stack([G_lin_discrete, G_log_discrete], dim=-1)
+            else:
+                # For dual_G, discretize by taking argmax and converting to one-hot
+                max_indices = torch.argmax(G, dim=-1)  # [B, dag_depth]
+                G_discrete = torch.zeros_like(G)  # [B, dag_depth, 2]
+                G_discrete.scatter_(-1, max_indices.unsqueeze(-1), 1.0)
+                G = G_discrete
 
-            max_indices = torch.argmax(G, dim=-1)  # [B, dag_depth]
-            G_discrete = torch.zeros_like(G)  # [B, dag_depth, 2]
-            G_discrete.scatter_(-1, max_indices.unsqueeze(-1), 1.0)
-            G = G_discrete
-
-            # Update the current G values for computation
-            self._current_G_lin = G[:, :, 0]
-            self._current_G_log = G[:, :, 1]
+                # Update the current G values for computation
+                self._current_G_lin = G[:, :, 0]
+                self._current_G_log = G[:, :, 1]
 
             O = torch.round(O).clamp(-1.0, 1.0)
 
