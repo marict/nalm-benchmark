@@ -39,7 +39,7 @@ TEST_RANGES = [
     ([10, 20], [20, 40], "p20"),  # positive large (10-20)
 ]
 
-OPERATIONS = ["add", "sub", "mul", "div"]  # Test all operations
+OPERATIONS = ["add"]  # Test one operation to debug perturbation
 
 # Simple freeze configuration - now we just need op, freeze_G, and freeze_O
 FREEZE_CONFIG = {
@@ -56,13 +56,11 @@ def create_perfect_dag_layer(operation, single_G=True):
     layer = DAGLayer(
         in_features=2,
         out_features=1,
-        dag_depth=1,
         op=operation,
         freeze_O=FREEZE_CONFIG["freeze_O"],
         freeze_G=FREEZE_CONFIG["freeze_G"],
         freeze_input_norm=False,  # Match --no-norm from training
         use_norm=False,  # Disable input norm completely
-        G_perturbation=0.0,  # No perturbation for perfect weights
         single_G=single_G,
     )
     layer.eval()
@@ -70,21 +68,19 @@ def create_perfect_dag_layer(operation, single_G=True):
 
 
 def create_perturbed_dag_layer(operation, perturbation, single_G=True):
-    """Create DAG layer with perturbed weights."""
+    """Create DAG layer with perturbed weights using the built-in perturbation system."""
     layer = DAGLayer(
         in_features=2,
         out_features=1,
-        dag_depth=1,
         op=operation,
         freeze_O=FREEZE_CONFIG["freeze_O"],
         freeze_G=FREEZE_CONFIG["freeze_G"],
         freeze_input_norm=False,  # Match --no-norm from training
         use_norm=False,  # Disable input norm completely
-        G_perturbation=perturbation,
+        G_perturbation=perturbation,  # Use the built-in perturbation system
         single_G=single_G,
     )
-    # Keep in training mode to use soft G values with perturbation
-    layer.train()
+    layer.eval()  # Use eval mode for consistent inference
     return layer
 
 

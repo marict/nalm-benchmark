@@ -140,6 +140,7 @@ def run_single_test(
     lr_cosine=False,
     lr_min=1e-4,
     use_mean_thresh=False,
+    verbose=False,
 ):
     """Run a single test and return result."""
 
@@ -150,8 +151,6 @@ def run_single_test(
         "--layer-type",
         "DAG",
         "--no-open-browser",
-        "--dag-depth",
-        "1",
         "--operation",
         operation,
         "--seed",
@@ -217,6 +216,7 @@ def run_single_test(
         grok_threshold = GROK_THRESHOLDS[operation]["mean"]
     else:
         grok_threshold = GROK_THRESHOLDS.get(operation, {}).get(range_name, 1e-7)
+    assert grok_threshold is not None, "Grokking threshold not found"
     cmd.extend(["--grok-threshold", str(grok_threshold)])
 
     # Add frozen arguments using new simplified interface
@@ -244,7 +244,10 @@ def run_single_test(
             # Read output line by line in real-time
             for line in process.stdout:
                 line_stripped = line.rstrip()
-                if show_progress:
+                if verbose:
+                    # Print all output when verbose mode is enabled
+                    print(line_stripped)
+                elif show_progress:
                     # Show training progress lines and important status messages
                     if (
                         re.match(r"^train \d+:", line_stripped)
@@ -666,6 +669,12 @@ def main():
         default=1e-4,
         help="Minimum learning rate for cosine decay (default: 1e-4)",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=False,
+        help="Print stdout from benchmark runs for debugging",
+    )
     args = parser.parse_args()
 
     # Set disable_logging as the inverse of enable_logging
@@ -791,6 +800,7 @@ def main():
                     getattr(args, "lr_cosine", False),
                     getattr(args, "lr_min", 1e-4),
                     getattr(args, "use_mean_thresh", False),
+                    getattr(args, "verbose", False),
                 )
                 results.append(result)
                 completed += 1

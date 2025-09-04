@@ -101,14 +101,16 @@ class DAGLayer(ExtendedTorchModule):
 
         # Force in_features=2 for single arithmetic operations
         if in_features != 2:
-            raise ValueError(f"Simplified DAGLayer only supports in_features=2, got {in_features}")
-            
+            raise ValueError(
+                f"Simplified DAGLayer only supports in_features=2, got {in_features}"
+            )
+
         self.in_features = in_features
         self.out_features = out_features
 
         # Fixed architecture: depth=1, 2 inputs, 1 output
         self.num_initial_nodes = 2
-        
+
         self.op = op
         self.freeze_G = bool(freeze_G)
         self.freeze_O = bool(freeze_O)
@@ -123,16 +125,22 @@ class DAGLayer(ExtendedTorchModule):
         self.epsilon_smooth = bool(epsilon_smooth)
 
         # Replace neural heads with simple learnable parameters
-        # O parameters: [weight_for_input0, weight_for_input1] 
-        self.O_params = nn.Parameter(torch.tensor([1.0, 1.0]))  # Default to [1, 1] for add/mul
-        
+        # O parameters: [weight_for_input0, weight_for_input1]
+        self.O_params = nn.Parameter(
+            torch.tensor([1.0, 1.0])
+        )  # Default to [1, 1] for add/mul
+
         # G parameter: single scalar for domain mixing (if single_G) or 2 scalars (if dual_G)
         if self.single_G:
-            self.G_param = nn.Parameter(torch.tensor(0.0))  # Single scalar, sigmoid -> [0,1]
+            self.G_param = nn.Parameter(
+                torch.tensor(0.0)
+            )  # Single scalar, sigmoid -> [0,1]
         else:
-            self.G_params = nn.Parameter(torch.tensor([0.0, 0.0]))  # [G_lin_logit, G_log_logit]
+            self.G_params = nn.Parameter(
+                torch.tensor([0.0, 0.0])
+            )  # [G_lin_logit, G_log_logit]
 
-        # Optional input normalization (much simpler now)  
+        # Optional input normalization (much simpler now)
         if self.use_norm:
             self.input_norm = nn.LayerNorm(in_features)
             # Freeze input norm parameters if specified
@@ -153,16 +161,10 @@ class DAGLayer(ExtendedTorchModule):
         self._log_lim = math.log(self._mag_max) - 1.0
 
     def reset_parameters(self) -> None:
-        # Initialize O parameters based on operation
+        # Initialize O parameters to neutral
         with torch.no_grad():
-            if self.op in ["add", "mul"]:
-                self.O_params.data = torch.tensor([1.0, 1.0])  # [1, 1] for add/mul
-            elif self.op in ["sub", "div"]:  
-                self.O_params.data = torch.tensor([1.0, -1.0])  # [1, -1] for sub/div
-            else:
-                # Default initialization for unknown operations
-                self.O_params.data = torch.tensor([1.0, 1.0])
-                
+            self.O_params.data = torch.tensor([0.5, 0.5])
+
         # Initialize G parameters to neutral (0 logits = equal probability)
         with torch.no_grad():
             if self.single_G:
@@ -172,46 +174,62 @@ class DAGLayer(ExtendedTorchModule):
 
     def predict_dag_weights(self, input: torch.Tensor, device, dtype, B: int):
         """Generate O and G weights using simple learnable parameters (input-independent)."""
-        
+
         # O weights: simply broadcast our learned parameters to batch size
         # Shape: [B, 2] (batch_size, 2_inputs)
         O = self.O_params.unsqueeze(0).expand(B, -1)  # [B, 2]
-        
-        # G weights: compute from our learned parameters  
+
+        # G weights: compute from our learned parameters
         if self.single_G:
             # Single G: apply sigmoid to get value in [0, 1]
             G_single = torch.sigmoid(self.G_param)  # scalar
-            
+
             if self.epsilon_smooth:
                 # Apply epsilon smoothing for training stability
                 eps = 1e-5
-                G_single = eps + (1.0 - 2.0 * eps) * G_single  # Map [0,1] to [1e-5, 1-1e-5]
-            
-            G_lin = G_single.unsqueeze(0).expand(B)  # [B] 
+                G_single = (
+                    eps + (1.0 - 2.0 * eps) * G_single
+                )  # Map [0,1] to [1e-5, 1-1e-5]
+
+            G_lin = G_single.unsqueeze(0).expand(B)  # [B]
             G_log = 1.0 - G_single.unsqueeze(0).expand(B)  # [B]
         else:
             # Dual G: apply softmax to get probabilities
-            G_probs = torch.softmax(self.G_params, dim=0)  # [2] -> [G_lin_prob, G_log_prob]
+            G_probs = torch.softmax(
+                self.G_params, dim=0
+            )  # [2] -> [G_lin_prob, G_log_prob]
             G_lin = G_probs[0].unsqueeze(0).expand(B)  # [B]
             G_log = G_probs[1].unsqueeze(0).expand(B)  # [B]
 
         # Apply frozen O values if specified (override learned values)
         if self.freeze_O:
             if self.op in ["add", "mul"]:
-                O = torch.tensor([1.0, 1.0], device=device, dtype=dtype).unsqueeze(0).expand(B, -1)
+                O = (
+                    torch.tensor([1.0, 1.0], device=device, dtype=dtype)
+                    .unsqueeze(0)
+                    .expand(B, -1)
+                )
             elif self.op in ["sub", "div"]:
-                O = torch.tensor([1.0, -1.0], device=device, dtype=dtype).unsqueeze(0).expand(B, -1)
+                O = (
+                    torch.tensor([1.0, -1.0], device=device, dtype=dtype)
+                    .unsqueeze(0)
+                    .expand(B, -1)
+                )
             else:
-                O = torch.tensor([1.0, 1.0], device=device, dtype=dtype).unsqueeze(0).expand(B, -1)
+                O = (
+                    torch.tensor([1.0, 1.0], device=device, dtype=dtype)
+                    .unsqueeze(0)
+                    .expand(B, -1)
+                )
 
         # Apply frozen G values if specified (override learned values)
         if self.freeze_G:
             if self.op in ["add", "sub"]:
                 # Linear operations: G=1.0 for linear, G=0.0 for log
-                G_lin = torch.ones(B, device=device, dtype=dtype) 
+                G_lin = torch.ones(B, device=device, dtype=dtype)
                 G_log = torch.zeros(B, device=device, dtype=dtype)
             elif self.op in ["mul", "div"]:
-                # Log operations: G=0.0 for linear, G=1.0 for log  
+                # Log operations: G=0.0 for linear, G=1.0 for log
                 G_lin = torch.zeros(B, device=device, dtype=dtype)
                 G_log = torch.ones(B, device=device, dtype=dtype)
             else:
@@ -219,62 +237,20 @@ class DAGLayer(ExtendedTorchModule):
                 G_lin = torch.full((B,), 0.5, device=device, dtype=dtype)
                 G_log = torch.full((B,), 0.5, device=device, dtype=dtype)
 
+            # Apply perturbation to frozen G values if specified
+            if self.G_perturbation > 0.0:
+                if self.op in ["add", "sub"]:
+                    # Perfect: G_lin=1.0, G_log=0.0
+                    # Perturb by moving away from perfect values
+                    G_lin = G_lin - self.G_perturbation  # 1.0 -> 1.0-ε
+                    G_log = G_log + self.G_perturbation  # 0.0 -> ε
+                elif self.op in ["mul", "div"]:
+                    # Perfect: G_lin=0.0, G_log=1.0
+                    # Perturb by moving away from perfect values
+                    G_lin = G_lin + self.G_perturbation  # 0.0 -> ε
+                    G_log = G_log - self.G_perturbation  # 1.0 -> 1.0-ε
+
         return O, G_lin, G_log
-
-    def _compute_simple_domain_mixed_result(
-        self,
-        working_mag: torch.Tensor,
-        working_sign: torch.Tensor,
-        O_step: torch.Tensor,
-        G_step: torch.Tensor,
-    ) -> torch.Tensor:
-        """Simple domain mixing from the working version."""
-
-        signed_values = working_sign * working_mag
-        log_mag = torch.log(torch.clamp(working_mag, min=self._mag_min))
-        mixed = log_mag * (1.0 - G_step) + signed_values * G_step
-        return torch.sum(O_step * mixed, dim=-1, keepdim=True)
-
-    def soft_floor(self, x: torch.Tensor, min: float, t: float = 1.0) -> torch.Tensor:
-        beta = 1.0 / t
-        return min + torch.nn.functional.softplus(x - min, beta=beta)
-
-    def soft_ceiling(self, x: torch.Tensor, max: float, t: float = 1.0) -> torch.Tensor:
-        beta = 1.0 / t
-        return max - torch.nn.functional.softplus(max - x, beta=beta)
-
-    def soft_clamp(
-        self, x: torch.Tensor, min: float, max: float, t: float = 1.0
-    ) -> torch.Tensor:
-        return self.soft_floor(self.soft_ceiling(x, max, t), min, t)
-
-    def _is_nan(
-        self, name: str, tensor: torch.Tensor, print_debug: bool = False
-    ) -> None:
-        if not torch.isfinite(tensor).all():
-            finite_mask = torch.isfinite(tensor)
-            bad_idx = torch.nonzero(~finite_mask, as_tuple=False)
-            first_bad = bad_idx[0].tolist() if bad_idx.numel() > 0 else []
-
-            finite_vals = tensor[finite_mask]
-            min_val = (
-                float(finite_vals.min().item())
-                if finite_vals.numel() > 0
-                else float("nan")
-            )
-            max_val = (
-                float(finite_vals.max().item())
-                if finite_vals.numel() > 0
-                else float("nan")
-            )
-
-            if print_debug:
-                print(
-                    f"Non-finite detected in '{name}' (NaN/Inf). First-bad index={first_bad}; "
-                    f"min_finite={min_val}, max_finite={max_val}; shape={tuple(tensor.shape)}"
-                )
-            return True
-        return False
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         """Forward pass using original domain mixing logic with learned G parameters."""
@@ -291,8 +267,7 @@ class DAGLayer(ExtendedTorchModule):
         if self.input_norm is not None:
             input = self.input_norm(input)
 
-        # Convert to computation dtype
-        input = input.to(dtype)
+        # Note: input already has the correct dtype
         init_sign = torch.where(
             input >= 0,
             torch.tensor(1.0, device=device),
@@ -304,13 +279,15 @@ class DAGLayer(ExtendedTorchModule):
 
         # For depth=1, we only need the first step
         O_step = O[:, 0, :] if O.dim() == 3 else O  # Handle both old and new O formats
-        G_lin_step = G_lin[:, 0] if G_lin.dim() == 2 else G_lin  # Handle batch dimension
+        G_lin_step = (
+            G_lin[:, 0] if G_lin.dim() == 2 else G_lin
+        )  # Handle batch dimension
         G_log_step = G_log[:, 0] if G_log.dim() == 2 else G_log
-        
+
         # Set up working arrays (simplified for depth=1)
         working_mag = torch.abs(input)  # [B, 2]
         working_sign = init_sign  # [B, 2]
-        
+
         # Compute linear and log domain results using original logic
         signed_values = working_sign * working_mag
         R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)  # [B, 1]
@@ -319,47 +296,49 @@ class DAGLayer(ExtendedTorchModule):
             dim=-1,
             keepdim=True,
         )  # [B, 1]
-        
+
         # Linear domain sign computation
         sign_eps = 1e-4
         linear_sign = torch.tanh(R_lin / sign_eps)
-        
+
         # Log domain sign computation (original logic)
         w = torch.abs(O_step)
         neg_frac = 0.5 * (1.0 - working_sign)
         m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
         log_sign = torch.cos(math.pi * m)
-        
+
         # Mix signs based on G parameters
         if self.single_G:
             # Single G: convex blend
             G_step = G_lin_step.unsqueeze(-1)  # [B, 1]
             V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
         else:
-            # Dual G: weighted combination  
+            # Dual G: weighted combination
             G_lin_expanded = G_lin_step.unsqueeze(-1)  # [B, 1]
             G_log_expanded = G_log_step.unsqueeze(-1)  # [B, 1]
             V_sign_new = G_lin_expanded * linear_sign + G_log_expanded * log_sign
-            
+
         # Magnitude computation - CRITICAL: Mix in log space then exponentiate
-        linear_mag = torch.sqrt(R_lin * R_lin + 1e-8)  # smooth |.| 
+        linear_mag = torch.sqrt(R_lin * R_lin + 1e-8)  # smooth |.|
         l_lin = torch.log(torch.clamp(linear_mag, min=self._mag_min))
         l_log = torch.clamp(R_log, min=-self._log_lim, max=self._log_lim)
-        
+
         # Mix magnitudes in log space (this is the key!)
         if self.single_G:
             # Single G: convex blend in log space
-            G_step = G_lin_step.unsqueeze(-1)  # [B, 1] 
-            m_log = l_log + G_step * (l_lin - l_log)  # Direct interpolation in log space
+            G_step = G_lin_step.unsqueeze(-1)  # [B, 1]
+            m_log = l_log + G_step * (
+                l_lin - l_log
+            )  # Direct interpolation in log space
         else:
             # Dual G: weighted combination in log space
             G_lin_expanded = G_lin_step.unsqueeze(-1)  # [B, 1]
             G_log_expanded = G_log_step.unsqueeze(-1)  # [B, 1]
             m_log = G_log_expanded * l_log + G_lin_expanded * l_lin
-            
+
         m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
         V_mag_new = torch.exp(m_log)
-        
+
         # Final result
         final_value = (V_sign_new * V_mag_new).squeeze(-1)  # [B]
 
@@ -382,7 +361,7 @@ class DAGLayer(ExtendedTorchModule):
             # Dual G: get the softmax probabilities
             g_probs = torch.softmax(self.G_params, dim=0)
             g_value = g_probs[0].item()  # Use linear domain probability
-        
+
         # Calculate sparsity error for G (gating parameter)
         # G should be close to 0 (log domain) or 1 (linear domain) for optimal performance
         # Sparsity error = min(|G|, |1-G|) measures distance to discrete values {0, 1}

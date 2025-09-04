@@ -767,7 +767,7 @@ parser.add_argument(
 parser.add_argument(
     "--grok-threshold",
     type=float,
-    default=1e-13,
+    default=1e-7,
     help="Grokking threshold for extrapolation error (default: 1e-7)",
 )
 parser.add_argument(
@@ -920,7 +920,9 @@ import sys
 
 no_selector_explicitly_provided = "--no-selector" in sys.argv
 if not no_selector_explicitly_provided:
-    print(f"INFO: Automatically enabling --no-selector for simplified single operations")
+    print(
+        f"INFO: Automatically enabling --no-selector for simplified single operations"
+    )
     args.no_selector = True
 
 # Initialize wandb with note
@@ -1430,14 +1432,28 @@ for epoch_i, (x_train, t_train) in progress_bar:
 
         log_dict["mse/extra"] = float(extrapolation_error.detach().cpu().item())
 
+        # Use same high precision formatting for dual_G
+        def format_value(val):
+            if val < 1e-4:
+                return f"{val:.2e}"
+            else:
+                return f"{val:.6f}"
+
         # Get G parameter value for logging
         g_value_str = ""
-        dag = next((m for m in model.modules() if hasattr(m, 'G_param') or hasattr(m, 'G_params')), None)
+        dag = next(
+            (
+                m
+                for m in model.modules()
+                if hasattr(m, "G_param") or hasattr(m, "G_params")
+            ),
+            None,
+        )
         if dag is not None:
-            if hasattr(dag, 'single_G') and dag.single_G and hasattr(dag, 'G_param'):
+            if hasattr(dag, "single_G") and dag.single_G and hasattr(dag, "G_param"):
                 g_raw = dag.G_param.item()
                 g_sigmoid = torch.sigmoid(dag.G_param).item()
-                
+
                 # Calculate actual G_lin and G_log values used in computation
                 if dag.freeze_G:
                     if dag.op in ["add", "sub"]:
@@ -1449,40 +1465,34 @@ for epoch_i, (x_train, t_train) in progress_bar:
                 else:
                     g_lin_actual = g_sigmoid
                     g_log_actual = 1.0 - g_sigmoid
-                
-                # Format values with high precision, using scientific notation for small values
-                def format_g_value(val):
-                    if val < 1e-4:
-                        return f"{val:.2e}"
-                    else:
-                        return f"{val:.6f}"
-                
-                g_sig_str = format_g_value(g_sigmoid)
-                g_lin_str = format_g_value(g_lin_actual)
-                g_log_str = format_g_value(g_log_actual)
-                
+
+                g_sig_str = format_value(g_sigmoid)
+                g_lin_str = format_value(g_lin_actual)
+                g_log_str = format_value(g_log_actual)
+
                 g_value_str = f", G_raw: {g_raw:.3f}, G_sig: {g_sig_str}, G_lin: {g_lin_str}, G_log: {g_log_str}"
-            elif hasattr(dag, 'G_params'):
+            elif hasattr(dag, "G_params"):
                 g_probs = torch.softmax(dag.G_params, dim=0)
-                # Use same high precision formatting for dual_G
-                def format_g_value(val):
-                    if val < 1e-4:
-                        return f"{val:.2e}"
-                    else:
-                        return f"{val:.6f}"
-                
-                g_lin_str = format_g_value(g_probs[0].item())
-                g_log_str = format_g_value(g_probs[1].item())
+
+                g_lin_str = format_value(g_probs[0].item())
+                g_log_str = format_value(g_probs[1].item())
                 g_value_str = f", G_lin: {g_lin_str}, G_log: {g_log_str}"
 
+            if hasattr(dag, "O_params"):
+                o_raw = dag.O_params.detach().cpu()
+                o_one = o_raw[0]
+                o_two = o_raw[1]
+                o_value_str = f", O: [{o_one}, {o_two}]"
+
         print(
-            "\ntrain %d: %.10f, inter: %.2e, extra: %.2e%s"
+            "\ntrain %d: %.10f, inter: %.2e, extra: %.2e%s%s"
             % (
                 epoch_i,
                 loss_train_criterion.detach().cpu().item(),
                 interpolation_error,
                 extrapolation_error.detach().cpu().item(),
                 g_value_str,
+                o_value_str,
             )
         )
 
@@ -1620,9 +1630,7 @@ if args.disable_early_stopping:
 
         # Calculate final sparsity error for successful runs
         try:
-            dag = next(
-                (m for m in model.modules() if isinstance(m, DAGLayer)), None
-            )
+            dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
             if dag is not None:
                 final_sparsity_error = dag.calculate_sparsity_error(args.operation)
                 print(f"  - Final sparsity error: {final_sparsity_error:.6f}")
