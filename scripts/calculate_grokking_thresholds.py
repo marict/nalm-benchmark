@@ -28,15 +28,15 @@ from stable_nalu.layer import DAGLayer
 
 # All test ranges used in comprehensive_table_test.py
 TEST_RANGES = [
-    ([-2, 2], [[-6, -2], [2, 6]], "sym"),     # symmetric around 0
-    ([-2, -1], [-6, -2], "neg"),              # negative moderate  
-    ([1, 2], [2, 6], "pos"),                  # positive moderate
-    ([-1.2, -1.1], [-6.1, -1.2], "n10"),     # negative narrow (around -1.1)
-    ([0.1, 0.2], [0.2, 2], "p01"),           # positive small (0.1-0.2)
-    ([-0.2, -0.1], [-2, -0.2], "n01"),       # negative small (-0.2 to -0.1)
-    ([1.1, 1.2], [1.2, 6], "p11"),           # positive narrow (around 1.1)
-    ([-20, -10], [-40, -20], "n20"),         # negative large (-20 to -10)
-    ([10, 20], [20, 40], "p20"),             # positive large (10-20)
+    ([-2, 2], [[-6, -2], [2, 6]], "sym"),  # symmetric around 0
+    ([-2, -1], [-6, -2], "neg"),  # negative moderate
+    ([1, 2], [2, 6], "pos"),  # positive moderate
+    ([-1.2, -1.1], [-6.1, -1.2], "n10"),  # negative narrow (around -1.1)
+    ([0.1, 0.2], [0.2, 2], "p01"),  # positive small (0.1-0.2)
+    ([-0.2, -0.1], [-2, -0.2], "n01"),  # negative small (-0.2 to -0.1)
+    ([1.1, 1.2], [1.2, 6], "p11"),  # positive narrow (around 1.1)
+    ([-20, -10], [-40, -20], "n20"),  # negative large (-20 to -10)
+    ([10, 20], [20, 40], "p20"),  # positive large (10-20)
 ]
 
 OPERATIONS = ["add", "sub", "mul", "div"]  # Test all operations
@@ -114,7 +114,9 @@ def calculate_threshold_mse(operation, interp_range, extrap_range, range_name):
     try:
         # Create perfect and perturbed models
         perfect_layer = create_perfect_dag_layer(operation, single_G=True)
-        perturbed_layer = create_perturbed_dag_layer(operation, PERTURBATION, single_G=True)
+        perturbed_layer = create_perturbed_dag_layer(
+            operation, PERTURBATION, single_G=True
+        )
 
         # Generate test data
         print(f"    Generating 100K test samples...", end="", flush=True)

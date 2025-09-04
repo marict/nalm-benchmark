@@ -2,9 +2,11 @@ import argparse
 import ast
 import datetime
 import math
+# Range mapping for shorthand notation - imported from range_constants
 import os
 import platform
 import random
+import sys
 import time
 from decimal import Decimal
 
@@ -20,9 +22,6 @@ from debug_utils import tap_context
 from stable_nalu.layer import DAGLayer
 from stable_nalu.layer.dag import DAGLayer
 
-# Range mapping for shorthand notation - imported from range_constants
-import os
-import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from range_constants import RANGE_MAPPING
 
@@ -915,7 +914,9 @@ if args.range is not None:
         interp_range, extrap_range = RANGE_MAPPING[args.range]
         args.interpolation_range = interp_range
         args.extrapolation_range = extrap_range
-        print(f"Using range shorthand '{args.range}': interp={interp_range}, extrap={extrap_range}")
+        print(
+            f"Using range shorthand '{args.range}': interp={interp_range}, extrap={extrap_range}"
+        )
     else:
         raise ValueError(f"Unknown range shorthand: {args.range}")
 

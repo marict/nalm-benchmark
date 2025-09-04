@@ -133,6 +133,15 @@ class DAGLayer(ExtendedTorchModule):
         # Add normalization layers (gated behind flag)
         if self.use_norm:
             self.input_norm = nn.LayerNorm(in_features)
+            self.extra_norm1 = nn.LayerNorm(in_features)
+            self.extra_norm2 = nn.LayerNorm(in_features)
+            self.extra_norm3 = nn.LayerNorm(in_features)
+            self.extra_norm4 = nn.LayerNorm(in_features)
+            self.extra_norm5 = nn.LayerNorm(in_features)
+            self.extra_norm6 = nn.LayerNorm(in_features)
+            self.extra_norm7 = nn.LayerNorm(in_features)
+            self.extra_norm8 = nn.LayerNorm(in_features)
+            self.extra_norm9 = nn.LayerNorm(in_features)
 
             # Freeze input norm parameters if specified
             if self.freeze_input_norm:
@@ -178,13 +187,36 @@ class DAGLayer(ExtendedTorchModule):
             nn.init.zeros_(self.output_selector_head.bias)
             nn.init.xavier_uniform_(self.output_selector_head.weight)
 
+    # NOTE: Batch size is fixed to 10k for eval in benchmark coe.
     def predict_dag_weights(self, input: torch.Tensor, device, dtype, B: int):
         """Predict DAG weights using neural network heads."""
         # Extract dense features if enabled
         head_input = input
 
+        # This might be necessary, otherwise large scales
+        # will create very confident predictions, sometimes in the wrong direction initially.
         if self.use_norm:
+            print("head input: ", head_input)
             head_input = self.input_norm(head_input)
+            print("head_input after 1 normalization:", head_input)
+            head_input = self.extra_norm1(head_input)
+            print("head_input after 2 normalization:", head_input)
+            head_input = self.extra_norm2(head_input)
+            print("head_input after 3 normalization:", head_input)
+            head_input = self.extra_norm3(head_input)
+            print("head_input after 4 normalization:", head_input)
+            head_input = self.extra_norm4(head_input)
+            print("head_input after 5 normalization:", head_input)
+            head_input = self.extra_norm5(head_input)
+            print("head_input after 6 normalization:", head_input)
+            head_input = self.extra_norm6(head_input)
+            print("head_input after 7 normalization:", head_input)
+            head_input = self.extra_norm7(head_input)
+            print("head_input after 8 normalization:", head_input)
+            head_input = self.extra_norm8(head_input)
+            print("head_input after 9 normalization:", head_input)
+            head_input = self.extra_norm9(head_input)
+            print("head_input after 10 normalization:", head_input)
 
         O_mag_flat = self.O_mag_head(head_input)
         O_mag_logits = O_mag_flat.view(B, self.dag_depth, self.total_nodes)
@@ -200,7 +232,7 @@ class DAGLayer(ExtendedTorchModule):
         G_logits = tap(G_logits, "G_logits", self.enable_taps)
 
         if not self.no_selector:
-            out_logits = self.output_selector_head(head_input).to(dtype)
+            out_logyits = self.output_selector_head(head_input).to(dtype)
         else:
             out_logits = None
 
@@ -245,15 +277,19 @@ class DAGLayer(ExtendedTorchModule):
         if self.single_G:
             # Single G mode: G_logits has shape [B, dag_depth]
             G_single = torch.sigmoid(G_logits)  # [B, dag_depth]
-            
+
             if self.epsilon_smooth:
                 # Apply epsilon smoothing like working version for training stability
                 eps = 1e-5
-                G_single = eps + (1.0 - 2.0 * eps) * G_single  # Map [0,1] to [1e-5, 1-1e-5]
-            
+                G_single = (
+                    eps + (1.0 - 2.0 * eps) * G_single
+                )  # Map [0,1] to [1e-5, 1-1e-5]
+
             # Store G_single directly - we'll use it in the forward pass
-            G_lin = G_single  # [B, dag_depth] - this IS the gate value 
-            G_log = 1.0 - G_single  # [B, dag_depth] - complement (for logging compatibility)
+            G_lin = G_single  # [B, dag_depth] - this IS the gate value
+            G_log = (
+                1.0 - G_single
+            )  # [B, dag_depth] - complement (for logging compatibility)
         else:
             # Dual G mode: G_logits has shape [B, dag_depth*2]
             # Reshape to [B, dag_depth, 2] for softmax over the 2 gate types
@@ -311,7 +347,7 @@ class DAGLayer(ExtendedTorchModule):
             # Clamp to valid probability range [0, 1]
             G_lin = torch.clamp(G_lin, 0.0, 1.0)
             G_log = torch.clamp(G_log, 0.0, 1.0)
-            
+
         # For backward compatibility, set G to be [G_lin, G_log] concatenated
         # This preserves the original tensor structure for logging
         G = torch.stack([G_lin, G_log], dim=-1)  # [B, dag_depth, 2]
@@ -332,7 +368,7 @@ class DAGLayer(ExtendedTorchModule):
                 G_single_discrete = (self._current_G_lin > 0.5).float()
                 G_lin_discrete = G_single_discrete
                 G_log_discrete = 1.0 - G_single_discrete
-                
+
                 # Update current G values and reconstruct G tensor
                 self._current_G_lin = G_lin_discrete
                 self._current_G_log = G_log_discrete
@@ -518,11 +554,13 @@ class DAGLayer(ExtendedTorchModule):
             if self.single_G:
                 # Single G: convex blend in log space with G_single as the blend factor
                 G_step = G_lin_step  # G_single stored in G_lin
-                m_log = l_log + G_step * (l_lin - l_log)  # Direct interpolation in log space
+                m_log = l_log + G_step * (
+                    l_lin - l_log
+                )  # Direct interpolation in log space
             else:
                 # Dual G: use weighted combination in log space
                 m_log = G_log_step * l_log + G_lin_step * l_lin
-            
+
             m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
             V_mag_new = torch.exp(m_log)
 

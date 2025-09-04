@@ -36,7 +36,7 @@ except ImportError:
 TEST_SEEDS = [122, 223, 42, 777, 1337]
 # Convert RANGE_MAPPING from single_layer_benchmark.py to original format
 TEST_RANGES = [
-    (interp_range, extrap_range, range_name) 
+    (interp_range, extrap_range, range_name)
     for range_name, (interp_range, extrap_range) in RANGE_MAPPING.items()
 ]
 
@@ -56,6 +56,7 @@ GROK_THRESHOLDS = {
         "p11": 6.28e-07,  # 6.283624600200711e-07
         "n20": 5.62e-03,  # 0.005620412947610021
         "p20": 7.59e-03,  # 0.0075875177513808015
+        "mean": 1.47e-03,
     },
     "sub": {
         "sym": 8.49e-08,  # 8.491075860206365e-08
@@ -67,6 +68,7 @@ GROK_THRESHOLDS = {
         "p11": 1.52e-07,  # 1.5204887091613272e-07
         "n20": 3.03e-06,  # 3.034398537238303e-06
         "p20": 3.12e-06,  # 3.1155784427028267e-06
+        "mean": 7.45e-07,
     },
     "mul": {
         "sym": 1.67e-05,  # 1.6737778241804336e-05
@@ -76,8 +78,9 @@ GROK_THRESHOLDS = {
         "p01": 1.03e-08,  # 1.0292519370125319e-08
         "n01": 5.94e-08,  # 5.935874440865518e-08
         "p11": 2.78e-06,  # 2.7833877311422837e-06
-        "n20": 8.75,      # 8.752370834350586
-        "p20": 7.74,      # 7.737755060195923
+        "n20": 8.75,  # 8.752370834350586
+        "p20": 7.74,  # 7.737755060195923
+        "mean": 1.83e00,
     },
     "div": {
         "sym": 3.66e-08,  # 3.663247021279403e-08
@@ -89,6 +92,7 @@ GROK_THRESHOLDS = {
         "p11": 1.74e-08,  # 1.740973676334079e-08
         "n20": 4.12e-07,  # 4.117767048228416e-07
         "p20": 4.64e-07,  # 4.6409492426846555e-07
+        "mean": 1.58e-07,
     },
 }
 
@@ -135,6 +139,7 @@ def run_single_test(
     single_G=False,
     lr_cosine=False,
     lr_min=1e-4,
+    use_mean_thresh=False,
 ):
     """Run a single test and return result."""
 
@@ -208,7 +213,10 @@ def run_single_test(
         cmd.extend(["--lr-min", str(lr_min)])
 
     # Add operation-specific and range-specific grokking threshold
-    grok_threshold = GROK_THRESHOLDS.get(operation, {}).get(range_name, 1e-7)
+    if use_mean_thresh:
+        grok_threshold = GROK_THRESHOLDS[operation]["mean"]
+    else:
+        grok_threshold = GROK_THRESHOLDS.get(operation, {}).get(range_name, 1e-7)
     cmd.extend(["--grok-threshold", str(grok_threshold)])
 
     # Add frozen arguments using new simplified interface
@@ -303,7 +311,8 @@ def run_single_test(
                         except:
                             pass
 
-        # Extract final interpolation loss for fallback analysis
+        # Extract final interpolation and extrapolation loss for fallback analysis
+        final_extra_loss = None
         if not grokked and not nan_error:
             for line in reversed(output_lines):
                 if "- loss_valid_inter:" in line:
@@ -314,6 +323,15 @@ def run_single_test(
                         break
                     except:
                         continue
+
+        # Also extract final extrapolation loss
+        for line in reversed(output_lines):
+            if "- loss_valid_extra:" in line:
+                try:
+                    final_extra_loss = float(line.split(":")[1].strip())
+                    break
+                except:
+                    continue
 
         # Determine status
         if nan_error:
@@ -336,6 +354,7 @@ def run_single_test(
             "grok_step": grok_step,
             "duration": duration,
             "final_inter_loss": final_inter_loss,
+            "final_extra_loss": final_extra_loss,
             "sparsity_error": final_sparsity_error,
         }
 
@@ -381,6 +400,13 @@ def calculate_operation_statistics(results, operation):
         if r.get("status") == "grokking" and r.get("sparsity_error") is not None
     ]
 
+    # Final extrapolation loss statistics (for all runs where available)
+    final_extra_losses = [
+        r.get("final_extra_loss")
+        for r in op_results
+        if r.get("final_extra_loss") is not None
+    ]
+
     return {
         "operation": operation,
         "success_rate": successes / trials if trials > 0 else 0.0,
@@ -395,6 +421,12 @@ def calculate_operation_statistics(results, operation):
         "sparsity_errors": sparsity_errors,
         "mean_sparsity": (
             sum(sparsity_errors) / len(sparsity_errors) if sparsity_errors else None
+        ),
+        "final_extra_losses": final_extra_losses,
+        "mean_final_extra": (
+            sum(final_extra_losses) / len(final_extra_losses)
+            if final_extra_losses
+            else None
         ),
     }
 
@@ -435,9 +467,11 @@ def print_statistical_analysis(results):
     # Per-operation analysis
     print(f"\nPER-OPERATION ANALYSIS:")
     print(
-        f"{'Operation':<10} {'Success Rate':<15} {'95% CI':<20} {'Mean Conv. Time':<18} {'95% CI':<20} {'Mean Sparsity':<15} {'95% CI':<20}"
+        f"{'Operation':<10} {'Success Rate':<15} {'95% CI':<20} {'Mean Conv. Time':<18} {'95% CI':<20} {'Mean Sparsity':<15} {'95% CI':<20} {'Mean Extra MSE':<15} {'95% CI':<20}"
     )
-    print(f"{'-'*10} {'-'*15} {'-'*20} {'-'*18} {'-'*20} {'-'*15} {'-'*20}")
+    print(
+        f"{'-'*10} {'-'*15} {'-'*20} {'-'*18} {'-'*20} {'-'*15} {'-'*20} {'-'*15} {'-'*20}"
+    )
 
     for operation in OPERATIONS:
         stats = calculate_operation_statistics(results, operation)
@@ -474,8 +508,22 @@ def print_statistical_analysis(results):
             sparsity_mean_str = "—"
             sparsity_ci_str = "No data"
 
+        # Final extra loss CI (for all runs where available)
+        if stats["final_extra_losses"]:
+            from confidence_intervals import beta_confidence_interval
+
+            extra_ci = beta_confidence_interval(stats["final_extra_losses"])
+            extra_mean_str = (
+                f"{stats['mean_final_extra']:.2e}"  # Scientific notation, 2 decimals
+            )
+            # Format CI bounds in scientific notation
+            extra_ci_str = f"[{extra_ci[0]:.2e}, {extra_ci[1]:.2e}]"
+        else:
+            extra_mean_str = "—"
+            extra_ci_str = "No data"
+
         print(
-            f"{operation.upper():<10} {success_rate_str:<15} {success_ci_str:<20} {conv_mean_str:<18} {conv_ci_str:<20} {sparsity_mean_str:<15} {sparsity_ci_str:<20}"
+            f"{operation.upper():<10} {success_rate_str:<15} {success_ci_str:<20} {conv_mean_str:<18} {conv_ci_str:<20} {sparsity_mean_str:<15} {sparsity_ci_str:<20} {extra_mean_str:<15} {extra_ci_str:<20}"
         )
 
     # Range-specific analysis (if there are multiple ranges)
@@ -533,6 +581,11 @@ def main():
         type=int,
         default=25,
         help="Number of seeds to use, starting from 0 (default: 25, uses seeds 0-24)",
+    )
+    parser.add_argument(
+        "--use-mean-thresh",
+        action="store_true",
+        help="Use the mean threshold over all ranges for success criteria",
     )
     parser.add_argument(
         "--seeds",
@@ -733,10 +786,11 @@ def main():
                     args.disable_logging,
                     args.disable_sounds,
                     args.unfreeze_eval,
-                    getattr(args, 'no_norm', False),
-                    getattr(args, 'single_G', False),
-                    getattr(args, 'lr_cosine', False),
-                    getattr(args, 'lr_min', 1e-4),
+                    getattr(args, "no_norm", False),
+                    getattr(args, "single_G", False),
+                    getattr(args, "lr_cosine", False),
+                    getattr(args, "lr_min", 1e-4),
+                    getattr(args, "use_mean_thresh", False),
                 )
                 results.append(result)
                 completed += 1
