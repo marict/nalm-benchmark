@@ -277,55 +277,93 @@ class DAGLayer(ExtendedTorchModule):
         return False
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        """Simplified forward pass for single arithmetic operations (depth=1)."""
+        """Forward pass using original domain mixing logic with learned G parameters."""
         if input.dim() != 2 or input.size(1) != self.in_features:
             raise ValueError(
                 f"Expected input of shape (B, {self.in_features}), got {tuple(input.shape)}"
             )
 
         device = input.device
-        dtype = input.dtype  # Use input's dtype for consistency
+        dtype = input.dtype  # Use input dtype to avoid mismatch
         B = input.size(0)
 
         # Apply input normalization if enabled
         if self.input_norm is not None:
             input = self.input_norm(input)
 
-        # Convert input to computation dtype
+        # Convert to computation dtype
         input = input.to(dtype)
+        init_sign = torch.where(
+            input >= 0,
+            torch.tensor(1.0, device=device),
+            torch.tensor(-1.0, device=device),
+        ).to(dtype)
 
         # Get operation weights and domain mixing parameters
         O, G_lin, G_log = self.predict_dag_weights(input, device, dtype, B)
 
-        # Extract input values
-        x1 = input[:, 0]  # [B]
-        x2 = input[:, 1]  # [B]
+        # For depth=1, we only need the first step
+        O_step = O[:, 0, :] if O.dim() == 3 else O  # Handle both old and new O formats
+        G_lin_step = G_lin[:, 0] if G_lin.dim() == 2 else G_lin  # Handle batch dimension
+        G_log_step = G_log[:, 0] if G_log.dim() == 2 else G_log
         
-        # Apply operation weights: O[0] * x1 + O[1] * x2 (typically [1,1] or [1,-1])
-        weighted_x1 = O[:, 0] * x1  # [B]
-        weighted_x2 = O[:, 1] * x2  # [B]
+        # Set up working arrays (simplified for depth=1)
+        working_mag = torch.abs(input)  # [B, 2]
+        working_sign = init_sign  # [B, 2]
+        
+        # Compute linear and log domain results using original logic
+        signed_values = working_sign * working_mag
+        R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)  # [B, 1]
+        R_log = torch.sum(
+            O_step * torch.log(torch.clamp(working_mag, min=self._mag_min)),
+            dim=-1,
+            keepdim=True,
+        )  # [B, 1]
+        
+        # Linear domain sign computation
+        sign_eps = 1e-4
+        linear_sign = torch.tanh(R_lin / sign_eps)
+        
+        # Log domain sign computation (original logic)
+        w = torch.abs(O_step)
+        neg_frac = 0.5 * (1.0 - working_sign)
+        m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+        log_sign = torch.cos(math.pi * m)
+        
+        # Mix signs based on G parameters
+        if self.single_G:
+            # Single G: convex blend
+            G_step = G_lin_step.unsqueeze(-1)  # [B, 1]
+            V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
+        else:
+            # Dual G: weighted combination  
+            G_lin_expanded = G_lin_step.unsqueeze(-1)  # [B, 1]
+            G_log_expanded = G_log_step.unsqueeze(-1)  # [B, 1]
+            V_sign_new = G_lin_expanded * linear_sign + G_log_expanded * log_sign
+            
+        # Magnitude computation - CRITICAL: Mix in log space then exponentiate
+        linear_mag = torch.sqrt(R_lin * R_lin + 1e-8)  # smooth |.| 
+        l_lin = torch.log(torch.clamp(linear_mag, min=self._mag_min))
+        l_log = torch.clamp(R_log, min=-self._log_lim, max=self._log_lim)
+        
+        # Mix magnitudes in log space (this is the key!)
+        if self.single_G:
+            # Single G: convex blend in log space
+            G_step = G_lin_step.unsqueeze(-1)  # [B, 1] 
+            m_log = l_log + G_step * (l_lin - l_log)  # Direct interpolation in log space
+        else:
+            # Dual G: weighted combination in log space
+            G_lin_expanded = G_lin_step.unsqueeze(-1)  # [B, 1]
+            G_log_expanded = G_log_step.unsqueeze(-1)  # [B, 1]
+            m_log = G_log_expanded * l_log + G_lin_expanded * l_lin
+            
+        m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
+        V_mag_new = torch.exp(m_log)
+        
+        # Final result
+        final_value = (V_sign_new * V_mag_new).squeeze(-1)  # [B]
 
-        # Always compute both linear and log domain results
-        # Linear domain: weighted sum (works for add/sub with correct O weights)
-        linear_result = weighted_x1 + weighted_x2  # [B]
-        
-        # Log domain: multiplicative operations in log space
-        abs_x1 = torch.abs(weighted_x1)
-        abs_x2 = torch.abs(weighted_x2)
-        log_sum = torch.log(torch.clamp(abs_x1, min=self._mag_min)) + torch.log(torch.clamp(abs_x2, min=self._mag_min))
-        
-        # Handle signs for log domain
-        sign1 = torch.sign(weighted_x1)
-        sign2 = torch.sign(weighted_x2)
-        log_sign = sign1 * sign2
-        log_result = log_sign * torch.exp(torch.clamp(log_sum, min=-self._log_lim, max=self._log_lim))  # [B]
-        
-        # Mix domains using learned G parameters
-        # For add/sub: G should learn G_lin→1, G_log→0 
-        # For mul/div: G should learn G_lin→0, G_log→1
-        mixed_result = G_lin * linear_result + G_log * log_result
-
-        return mixed_result.unsqueeze(-1)  # [B, 1] for compatibility
+        return final_value.unsqueeze(-1)  # [B, 1] for compatibility
 
     def calculate_sparsity_error(self, operation: str) -> float:
         """Calculate sparsity error based on G (gating) weights.

@@ -1450,10 +1450,30 @@ for epoch_i, (x_train, t_train) in progress_bar:
                     g_lin_actual = g_sigmoid
                     g_log_actual = 1.0 - g_sigmoid
                 
-                g_value_str = f", G_raw: {g_raw:.3f}, G_sig: {g_sigmoid:.3f}, G_lin: {g_lin_actual:.3f}, G_log: {g_log_actual:.3f}"
+                # Format values with high precision, using scientific notation for small values
+                def format_g_value(val):
+                    if val < 1e-4:
+                        return f"{val:.2e}"
+                    else:
+                        return f"{val:.6f}"
+                
+                g_sig_str = format_g_value(g_sigmoid)
+                g_lin_str = format_g_value(g_lin_actual)
+                g_log_str = format_g_value(g_log_actual)
+                
+                g_value_str = f", G_raw: {g_raw:.3f}, G_sig: {g_sig_str}, G_lin: {g_lin_str}, G_log: {g_log_str}"
             elif hasattr(dag, 'G_params'):
                 g_probs = torch.softmax(dag.G_params, dim=0)
-                g_value_str = f", G_lin: {g_probs[0].item():.3f}, G_log: {g_probs[1].item():.3f}"
+                # Use same high precision formatting for dual_G
+                def format_g_value(val):
+                    if val < 1e-4:
+                        return f"{val:.2e}"
+                    else:
+                        return f"{val:.6f}"
+                
+                g_lin_str = format_g_value(g_probs[0].item())
+                g_log_str = format_g_value(g_probs[1].item())
+                g_value_str = f", G_lin: {g_lin_str}, G_log: {g_log_str}"
 
         print(
             "\ntrain %d: %.10f, inter: %.2e, extra: %.2e%s"
