@@ -720,13 +720,7 @@ parser.add_argument(
     help="Skip final output selector and use the last intermediate node as output (DAG layer only)",
 )
 
-parser.add_argument(
-    "--dag-depth",
-    action="store",
-    default=3,
-    type=int,
-    help="Specify the DAG depth (number of intermediate computation steps, default: 3)",
-)
+# DAG depth is now fixed at 1 for simplified single arithmetic operations
 
 parser.add_argument(
     "--mix-mag-in-log",
@@ -925,8 +919,8 @@ if args.range is not None:
 import sys
 
 no_selector_explicitly_provided = "--no-selector" in sys.argv
-if args.dag_depth == 1 and not no_selector_explicitly_provided:
-    print(f"INFO: Automatically enabling --no-selector since dag_depth=1")
+if not no_selector_explicitly_provided:
+    print(f"INFO: Automatically enabling --no-selector for simplified single operations")
     args.no_selector = True
 
 # Initialize wandb with note
@@ -1037,7 +1031,7 @@ print(f"  - freeze_O: {getattr(args, 'freeze_O', False)}")
 print(f"  - freeze_G: {getattr(args, 'freeze_G', False)}")
 print(f"  - single_G: {getattr(args, 'single_G', False)}")
 print(f"  - no_selector: {args.no_selector}")
-print(f"  - dag_depth: {args.dag_depth}")
+print(f"  - dag_depth: 1 (fixed for simplified operations)")
 print(f"  -")
 
 summary_writer = stable_nalu.writer.DummySummaryWriter()
@@ -1115,7 +1109,7 @@ model = stable_nalu.network.SingleLayerNetwork(
     npu_Wr_init=args.npu_Wr_init,
     nru_div_mode=args.nru_div_mode,
     realnpu_reg_type=args.realnpu_reg_type,
-    dag_depth=args.dag_depth,
+    # dag_depth removed - fixed at 1 for simplified operations
     # DAG-specific arguments
     op=getattr(args, "op", None)
     or args.operation,  # Default to operation if op not specified
@@ -1412,14 +1406,13 @@ for epoch_i, (x_train, t_train) in progress_bar:
         o_l1_mean = float(dag._last_train_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
 
-        # Log sparsity error only for dag_depth=1
-        if args.dag_depth == 1:
-            try:
-                sparsity_error = dag.calculate_sparsity_error(args.operation)
-                log_dict["sparsity/error"] = float(sparsity_error)
-            except (ValueError, RuntimeError) as e:
-                # Skip sparsity logging if calculation fails
-                pass
+        # Log sparsity error (always available with simplified architecture)
+        try:
+            sparsity_error = dag.calculate_sparsity_error(args.operation)
+            log_dict["sparsity/error"] = float(sparsity_error)
+        except (ValueError, RuntimeError) as e:
+            # Skip sparsity logging if calculation fails
+            pass
 
     commit = False
     if epoch_i % args.log_interval == 0 or early_stop:
@@ -1437,13 +1430,39 @@ for epoch_i, (x_train, t_train) in progress_bar:
 
         log_dict["mse/extra"] = float(extrapolation_error.detach().cpu().item())
 
+        # Get G parameter value for logging
+        g_value_str = ""
+        dag = next((m for m in model.modules() if hasattr(m, 'G_param') or hasattr(m, 'G_params')), None)
+        if dag is not None:
+            if hasattr(dag, 'single_G') and dag.single_G and hasattr(dag, 'G_param'):
+                g_raw = dag.G_param.item()
+                g_sigmoid = torch.sigmoid(dag.G_param).item()
+                
+                # Calculate actual G_lin and G_log values used in computation
+                if dag.freeze_G:
+                    if dag.op in ["add", "sub"]:
+                        g_lin_actual, g_log_actual = 1.0, 0.0
+                    elif dag.op in ["mul", "div"]:
+                        g_lin_actual, g_log_actual = 0.0, 1.0
+                    else:
+                        g_lin_actual, g_log_actual = 0.5, 0.5
+                else:
+                    g_lin_actual = g_sigmoid
+                    g_log_actual = 1.0 - g_sigmoid
+                
+                g_value_str = f", G_raw: {g_raw:.3f}, G_sig: {g_sigmoid:.3f}, G_lin: {g_lin_actual:.3f}, G_log: {g_log_actual:.3f}"
+            elif hasattr(dag, 'G_params'):
+                g_probs = torch.softmax(dag.G_params, dim=0)
+                g_value_str = f", G_lin: {g_probs[0].item():.3f}, G_log: {g_probs[1].item():.3f}"
+
         print(
-            "\ntrain %d: %.10f, inter: %.2e, extra: %.2e"
+            "\ntrain %d: %.10f, inter: %.2e, extra: %.2e%s"
             % (
                 epoch_i,
                 loss_train_criterion.detach().cpu().item(),
                 interpolation_error,
                 extrapolation_error.detach().cpu().item(),
+                g_value_str,
             )
         )
 
@@ -1468,29 +1487,8 @@ for epoch_i, (x_train, t_train) in progress_bar:
                 model.train()
 
             # Print extrapolation example statistics
-            print_dag_internal_state(
-                x_tensor=x_extra_sample,
-                y_tensor=y_extra_sample,
-                t_tensor=t_extra_sample,
-                g_tensor=dag._last_eval_G,
-                o_tensor=dag._last_eval_O,
-                out_logits_tensor=dag._last_eval_out_logits,
-                value_vec_inter_tensor=dag._last_eval_value_vec_inter,
-                state_label="HARDENED eval",
-                dag_layer=dag,
-            )
-            # Inspect gate/selection on the first sample (concise)
-            print_dag_internal_state(
-                x_tensor=x_train,
-                y_tensor=y_train,
-                t_tensor=t_train,
-                g_tensor=dag._last_train_G,
-                o_tensor=dag._last_train_O,
-                out_logits_tensor=dag._last_train_out_logits,
-                value_vec_inter_tensor=dag._last_train_value_vec_inter,
-                state_label="SOFT training",
-                dag_layer=dag,
-            )
+            # Debug logging removed for simplified architecture
+            # Debug logging removed for simplified architecture
 
     if early_stop:
         print(f"Early stopped at step {epoch_i}")
@@ -1601,27 +1599,25 @@ if args.disable_early_stopping:
         print(f"  - Success achieved at step: {success_at_step}")
 
         # Calculate final sparsity error for successful runs
-        if args.dag_depth == 1:
-            try:
-                dag = next(
-                    (m for m in model.modules() if isinstance(m, DAGLayer)), None
-                )
-                if dag is not None:
-                    final_sparsity_error = dag.calculate_sparsity_error(args.operation)
-                    print(f"  - Final sparsity error: {final_sparsity_error:.6f}")
-            except Exception as e:
-                print(f"  - Sparsity error calculation failed: {e}")
-elif success_achieved:
-    print(f"Early stopping succeeded at step {success_at_step}")
-    # Calculate sparsity for early stopping case too
-    if args.dag_depth == 1:
         try:
-            dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
+            dag = next(
+                (m for m in model.modules() if isinstance(m, DAGLayer)), None
+            )
             if dag is not None:
                 final_sparsity_error = dag.calculate_sparsity_error(args.operation)
                 print(f"  - Final sparsity error: {final_sparsity_error:.6f}")
         except Exception as e:
             print(f"  - Sparsity error calculation failed: {e}")
+elif success_achieved:
+    print(f"Early stopping succeeded at step {success_at_step}")
+    # Calculate sparsity for early stopping case too
+    try:
+        dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
+        if dag is not None:
+            final_sparsity_error = dag.calculate_sparsity_error(args.operation)
+            print(f"  - Final sparsity error: {final_sparsity_error:.6f}")
+    except Exception as e:
+        print(f"  - Sparsity error calculation failed: {e}")
 
 print(f"  - loss_train_capped: {loss_train_capped}")
 print(f"  - loss_train (+reg loss): {loss_train}")
