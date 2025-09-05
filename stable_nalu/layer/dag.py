@@ -35,7 +35,7 @@ python experiments/single_layer_benchmark.py \
 
 
   Grokk with frozen add/mul
-  python experiments/single_layer_benchmark.py \         nalm
+  # python experiments/single_layer_benchmark.py \
     --layer-type DAG --seed 122 --no-open-browser  \
     --operation add  \
     --input-size 2 \
@@ -90,6 +90,8 @@ class DAGLayer(ExtendedTorchModule):
         use_norm: bool = True,
         single_G: bool = False,
         epsilon_smooth: bool = False,
+        G_log_bias : float = 0,
+        G_temperature: float = 1.0,
         **kwargs,
     ) -> None:
         super().__init__("dag", writers=writer, name=name, **kwargs)
@@ -110,6 +112,8 @@ class DAGLayer(ExtendedTorchModule):
 
         # Fixed architecture: depth=1, 2 inputs, 1 output
         self.num_initial_nodes = 2
+        self.G_log_bias = G_log_bias
+        self.G_temperature = G_temperature
 
         self.op = op
         self.freeze_G = bool(freeze_G)
@@ -168,9 +172,9 @@ class DAGLayer(ExtendedTorchModule):
         # Initialize G parameters to neutral (0 logits = equal probability)
         with torch.no_grad():
             if self.single_G:
-                self.G_param.data.zero_()  # 0 logit -> sigmoid(0) = 0.5
+                self.G_param.data.fill_(-self.G_log_bias)
             else:
-                self.G_params.data.zero_()  # [0, 0] -> equal softmax probabilities
+                self.G_params.data = torch.tensor([-self.G_log_bias, self.G_log_bias], dtype=torch.float32)
 
     def predict_dag_weights(self, input: torch.Tensor, device, dtype, B: int):
         """Generate O and G weights using simple learnable parameters (input-independent)."""
@@ -181,8 +185,8 @@ class DAGLayer(ExtendedTorchModule):
 
         # G weights: compute from our learned parameters
         if self.single_G:
-            # Single G: apply sigmoid to get value in [0, 1]
-            G_single = torch.sigmoid(self.G_param)  # scalar
+            # Single G: apply sigmoid with temperature to get value in [0, 1]
+            G_single = torch.sigmoid(self.G_param / self.G_temperature)  # scalar
 
             if self.epsilon_smooth:
                 # Apply epsilon smoothing for training stability
@@ -194,9 +198,9 @@ class DAGLayer(ExtendedTorchModule):
             G_lin = G_single.unsqueeze(0).expand(B)  # [B]
             G_log = 1.0 - G_single.unsqueeze(0).expand(B)  # [B]
         else:
-            # Dual G: apply softmax to get probabilities
+            # Dual G: apply softmax with temperature to get probabilities
             G_probs = torch.softmax(
-                self.G_params, dim=0
+                self.G_params / self.G_temperature, dim=0
             )  # [2] -> [G_lin_prob, G_log_prob]
             G_lin = G_probs[0].unsqueeze(0).expand(B)  # [B]
             G_log = G_probs[1].unsqueeze(0).expand(B)  # [B]
@@ -276,13 +280,9 @@ class DAGLayer(ExtendedTorchModule):
 
         # Get operation weights and domain mixing parameters
         O, G_lin, G_log = self.predict_dag_weights(input, device, dtype, B)
-
-        # For depth=1, we only need the first step
-        O_step = O[:, 0, :] if O.dim() == 3 else O  # Handle both old and new O formats
-        G_lin_step = (
-            G_lin[:, 0] if G_lin.dim() == 2 else G_lin
-        )  # Handle batch dimension
-        G_log_step = G_log[:, 0] if G_log.dim() == 2 else G_log
+        
+        # Store actual O values used in computation for logging
+        self._last_O_values = O
 
         # Set up working arrays (simplified for depth=1)
         working_mag = torch.abs(input)  # [B, 2]
@@ -290,33 +290,34 @@ class DAGLayer(ExtendedTorchModule):
 
         # Compute linear and log domain results using original logic
         signed_values = working_sign * working_mag
-        R_lin = torch.sum(O_step * signed_values, dim=-1, keepdim=True)  # [B, 1]
+        R_lin = torch.sum(O * signed_values, dim=-1, keepdim=True)  # [B, 1]
         R_log = torch.sum(
-            O_step * torch.log(torch.clamp(working_mag, min=self._mag_min)),
+            O * torch.log(torch.clamp(working_mag, min=self._mag_min)),
             dim=-1,
             keepdim=True,
         )  # [B, 1]
 
         # Linear domain sign computation
         sign_eps = 1e-4
-        linear_sign = torch.tanh(R_lin / sign_eps)
+        lin_sign = torch.tanh(R_lin / sign_eps)
 
-        # Log domain sign computation (original logic)
-        w = torch.abs(O_step)
+        # Log domain sign computation (simplified - no need for w since abs(O) is always positive)
         neg_frac = 0.5 * (1.0 - working_sign)
-        m = torch.sum(w * neg_frac, dim=-1, keepdim=True)
+        m = torch.sum(torch.abs(O) * neg_frac, dim=-1, keepdim=True)
         log_sign = torch.cos(math.pi * m)
 
         # Mix signs based on G parameters
         if self.single_G:
             # Single G: convex blend
-            G_step = G_lin_step.unsqueeze(-1)  # [B, 1]
-            V_sign_new = G_step * linear_sign + (1.0 - G_step) * log_sign
+            G_expanded = G_lin.unsqueeze(-1)  # [B, 1]
+            V_sign_new = G_expanded * lin_sign + (1.0 - G_expanded) * log_sign
         else:
             # Dual G: weighted combination
-            G_lin_expanded = G_lin_step.unsqueeze(-1)  # [B, 1]
-            G_log_expanded = G_log_step.unsqueeze(-1)  # [B, 1]
-            V_sign_new = G_lin_expanded * linear_sign + G_log_expanded * log_sign
+            G_lin_expanded = G_lin.unsqueeze(-1)  # [B, 1]
+            G_log_expanded = G_log.unsqueeze(-1)  # [B, 1]
+            V_sign_new = G_lin_expanded * lin_sign + G_log_expanded * log_sign
+
+        # V_sign_new = torch.tanh(V_sign_new)  # Clamp to [-1, 1]
 
         # Magnitude computation - CRITICAL: Mix in log space then exponentiate
         linear_mag = torch.sqrt(R_lin * R_lin + 1e-8)  # smooth |.|
@@ -326,19 +327,23 @@ class DAGLayer(ExtendedTorchModule):
         # Mix magnitudes in log space (this is the key!)
         if self.single_G:
             # Single G: convex blend in log space
-            G_step = G_lin_step.unsqueeze(-1)  # [B, 1]
-            m_log = l_log + G_step * (
+            G_expanded = G_lin.unsqueeze(-1)  # [B, 1]
+            m_log = l_log + G_expanded * (
                 l_lin - l_log
             )  # Direct interpolation in log space
         else:
             # Dual G: weighted combination in log space
-            G_lin_expanded = G_lin_step.unsqueeze(-1)  # [B, 1]
-            G_log_expanded = G_log_step.unsqueeze(-1)  # [B, 1]
+            G_lin_expanded = G_lin.unsqueeze(-1)  # [B, 1]
+            G_log_expanded = G_log.unsqueeze(-1)  # [B, 1]
             m_log = G_log_expanded * l_log + G_lin_expanded * l_lin
 
         m_log = torch.clamp(m_log, min=-self._log_lim, max=self._log_lim)
         V_mag_new = torch.exp(m_log)
 
+        # Store for logging (batch averages)
+        self._V_sign_mean = float(torch.mean(V_sign_new).detach().cpu().item())
+        self._V_mag_mean = float(torch.mean(V_mag_new).detach().cpu().item())
+        
         # Final result
         final_value = (V_sign_new * V_mag_new).squeeze(-1)  # [B]
 

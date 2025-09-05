@@ -42,57 +42,57 @@ TEST_RANGES = [
 
 OPERATIONS = ["div", "sub", "mul", "add"]
 
-# Grokking thresholds calculated using single_G frozen perfect weights + 1e-4 perturbation
-# These represent nearly-perfect solution performance for each operation/range
-# All values calculated directly from single_G threshold computation - no fallbacks used
+# Grokking thresholds calculated using corrected DAG implementation + 1e-4 perturbation
+# Updated with proper sign computation and domain mixing logic
+# All values calculated using W* ± ε methodology with perturbation applied to probabilities
 GROK_THRESHOLDS = {
     "add": {
-        "sym": 7.92e-07,  # 7.921446865566395e-07
-        "neg": 6.84e-07,  # 6.836895352080319e-07
-        "pos": 9.00e-07,  # 9.000044201457058e-07
-        "n10": 7.94e-07,  # 7.935566372907488e-07
-        "p01": 1.06e-08,  # 1.0558677487892965e-08
-        "n01": 3.11e-07,  # 3.114856241381858e-07
-        "p11": 6.28e-07,  # 6.283624600200711e-07
-        "n20": 5.62e-03,  # 0.005620412947610021
-        "p20": 7.59e-03,  # 0.0075875177513808015
-        "mean": 1.47e-03,
+        "sym": 7.55e-07,  # 7.549490987912577e-07
+        "neg": 1.14e-06,  # 1.138588572757726e-06
+        "pos": 3.68e-07,  # 3.684718876684201e-07
+        "n10": 1.13e-06,  # 1.1292953558950103e-06
+        "p01": 2.61e-08,  # 2.614881999818408e-08
+        "n01": 3.64e-07,  # 3.6444649254008255e-07
+        "p11": 2.63e-07,  # 2.6320685719838366e-07
+        "n20": 1.96e-05,  # 1.9573355530155823e-05
+        "p20": 2.73e-04,  # 0.0002734712033998221
+        "mean": 3.30e-05,
     },
     "sub": {
-        "sym": 8.49e-08,  # 8.491075860206365e-08
-        "neg": 7.04e-08,  # 7.038232396894273e-08
-        "pos": 1.01e-07,  # 1.0056447479200869e-07
-        "n10": 1.02e-07,  # 1.0150766343031137e-07
-        "p01": 3.79e-08,  # 3.7948476361293615e-08
-        "n01": 6.15e-09,  # 6.150935094595411e-09
-        "p11": 1.52e-07,  # 1.5204887091613272e-07
-        "n20": 3.03e-06,  # 3.034398537238303e-06
-        "p20": 3.12e-06,  # 3.1155784427028267e-06
-        "mean": 7.45e-07,
+        "sym": 1.31e-07,  # 1.3146181743195484e-07
+        "neg": 9.44e-08,  # 9.437047765459283e-08
+        "pos": 1.67e-07,  # 1.671609055620138e-07
+        "n10": 1.76e-07,  # 1.7587565537269256e-07
+        "p01": 3.42e-08,  # 3.415402716200333e-08
+        "n01": 7.68e-09,  # 7.682709579626135e-09
+        "p11": 3.04e-07,  # 3.0368553893822536e-07
+        "n20": 8.12e-06,  # 8.11863810668001e-06
+        "p20": 9.47e-06,  # 9.47301941778278e-06
+        "mean": 2.06e-06,
     },
     "mul": {
-        "sym": 1.67e-05,  # 1.6737778241804336e-05
-        "neg": 2.95e-05,  # 2.951338374259649e-05
-        "pos": 3.95e-06,  # 3.952916131311213e-06
-        "n10": 2.29e-05,  # 2.292363697051769e-05
-        "p01": 1.03e-08,  # 1.0292519370125319e-08
-        "n01": 5.94e-08,  # 5.935874440865518e-08
-        "p11": 2.78e-06,  # 2.7833877311422837e-06
-        "n20": 8.75,  # 8.752370834350586
-        "p20": 7.74,  # 7.737755060195923
-        "mean": 1.83e00,
+        "sym": 1.27e-05,  # 1.273292309633689e-05
+        "neg": 2.35e-05,  # 2.3469987354474142e-05
+        "pos": 2.04e-06,  # 2.0408499494806165e-06
+        "n10": 1.83e-05,  # 1.8266289771418087e-05
+        "p01": 4.31e-09,  # 4.313623680474166e-09
+        "n01": 6.13e-08,  # 6.132943042302941e-08
+        "p11": 1.39e-06,  # 1.3946305443823803e-06
+        "n20": 1.99e-01,  # 0.1994268298149109
+        "p20": 6.67e-02,  # 0.06668742001056671
+        "mean": 2.95e-02,
     },
     "div": {
-        "sym": 3.66e-08,  # 3.663247021279403e-08
-        "neg": 5.78e-08,  # 5.78118989125187e-08
-        "pos": 1.55e-08,  # 1.5454726387531537e-08
-        "n10": 9.49e-08,  # 9.494439296986457e-08
-        "p01": 3.85e-08,  # 3.8496671095344935e-08
-        "n01": 2.87e-07,  # 2.86744133859429e-07
-        "p11": 1.74e-08,  # 1.740973676334079e-08
-        "n20": 4.12e-07,  # 4.117767048228416e-07
-        "p20": 4.64e-07,  # 4.6409492426846555e-07
-        "mean": 1.58e-07,
+        "sym": 4.55e-08,  # 4.5527535519340745e-08
+        "neg": 6.59e-08,  # 6.592157575369129e-08
+        "pos": 2.53e-08,  # 2.5305245898721296e-08
+        "n10": 9.25e-08,  # 9.251810695332097e-08
+        "p01": 1.06e-07,  # 1.0574753162018169e-07
+        "n01": 4.07e-07,  # 4.06872857183771e-07
+        "p11": 2.26e-08,  # 2.2558596768362804e-08
+        "n20": 1.99e-08,  # 1.990489728598277e-08
+        "p20": 3.19e-08,  # 3.190864106272784e-08
+        "mean": 9.07e-08,
     },
 }
 
@@ -141,6 +141,9 @@ def run_single_test(
     lr_min=1e-4,
     use_mean_thresh=False,
     verbose=False,
+    clip_grad_norm=None,
+    g_temperature=1.0,
+    learning_rate=1e-3,
 ):
     """Run a single test and return result."""
 
@@ -162,7 +165,7 @@ def run_single_test(
         "--max-iterations",
         str(max_iterations),
         "--learning-rate",
-        "1e-3",
+        str(learning_rate),
         "--interpolation-range",
         str(interp_range),
         "--extrapolation-range",
@@ -172,8 +175,6 @@ def run_single_test(
         (
             "99999" if disable_logging else "100"
         ),  # Very high interval when logging disabled
-        "--clip-grad-norm",
-        "0.01",
         "--note",
         f"seed{seed}_{range_name}",
     ]
@@ -181,6 +182,10 @@ def run_single_test(
     # Add restart argument if specified
     if restart_iter is not None:
         cmd.extend(["--restart-iter", str(restart_iter)])
+
+    # Add gradient clipping if specified
+    if clip_grad_norm is not None:
+        cmd.extend(["--clip-grad-norm", str(clip_grad_norm)])
 
     # Add disable early stopping argument if specified
     if disable_early_stopping:
@@ -210,6 +215,10 @@ def run_single_test(
     if lr_cosine:
         cmd.append("--lr-cosine")
         cmd.extend(["--lr-min", str(lr_min)])
+        
+    # Add G temperature if different from default
+    if g_temperature != 1.0:
+        cmd.extend(["--G-temperature", str(g_temperature)])
 
     # Add operation-specific and range-specific grokking threshold
     if use_mean_thresh:
@@ -616,6 +625,18 @@ def main():
         help="Batch size for training (default: 128)",
     )
     parser.add_argument(
+        "--G-temperature",
+        type=float,
+        default=1.0,
+        help="Temperature for G softmax/sigmoid (lower = sharper, default: 1.0)",
+    )
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=1e-3,
+        help="Learning rate for training (default: 1e-3)",
+    )
+    parser.add_argument(
         "--enable-logging",
         action="store_true",
         default=False,
@@ -668,6 +689,12 @@ def main():
         type=float,
         default=1e-4,
         help="Minimum learning rate for cosine decay (default: 1e-4)",
+    )
+    parser.add_argument(
+        "--clip-grad-norm",
+        type=float,
+        default=None,
+        help="Gradient clipping norm (default: no clipping)",
     )
     parser.add_argument(
         "--verbose",
@@ -801,6 +828,9 @@ def main():
                     getattr(args, "lr_min", 1e-4),
                     getattr(args, "use_mean_thresh", False),
                     getattr(args, "verbose", False),
+                    getattr(args, "clip_grad_norm", None),
+                    getattr(args, "G_temperature", 1.0),
+                    getattr(args, "learning_rate", 1e-3),
                 )
                 results.append(result)
                 completed += 1

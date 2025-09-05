@@ -661,6 +661,42 @@ parser.add_argument(
     help="Reinitialization only occurs if the avg accumulated loss is greater than this threshold.",
 )
 
+# Loss function options
+parser.add_argument(
+    "--mape-loss",
+    action="store_true",
+    help="Use Mean Absolute Percentage Error loss instead of MSE"
+)
+parser.add_argument(
+    "--rel-mse-loss", 
+    action="store_true",
+    help="Use Relative MSE loss instead of MSE"
+)
+parser.add_argument(
+    "--log-mse-loss",
+    action="store_true", 
+    help="Use Log-scale MSE loss instead of MSE"
+)
+parser.add_argument(
+    "--rel-huber-loss",
+    action="store_true",
+    help="Use Relative Huber loss instead of MSE"
+)
+parser.add_argument(
+    "--huber-delta",
+    action="store",
+    default=1.0,
+    type=float,
+    help="Delta parameter for Huber loss (default: 1.0)"
+)
+parser.add_argument(
+    "--G-temperature",
+    action="store",
+    default=1.0,
+    type=float,
+    help="Temperature for G softmax/sigmoid (lower = sharper, default: 1.0)"
+)
+
 parser.add_argument(
     "--num-bins",
     action="store",
@@ -1124,13 +1160,41 @@ model = stable_nalu.network.SingleLayerNetwork(
     use_norm=use_norm,
     single_G=getattr(args, "single_G", False),
     epsilon_smooth=getattr(args, "epsilon_smooth", False),
+    G_temperature=getattr(args, "G_temperature", 1.0),
     # Disable taps when logging is disabled
     _enable_taps=not getattr(args, "disable_logging", False),
 )
 model.reset_parameters()
 if args.cuda:
     model.cuda()
-criterion = torch.nn.MSELoss()
+
+# Define alternative loss functions
+def mape_loss(y_pred, y_true):
+    return torch.mean(torch.abs((y_true - y_pred) / (torch.abs(y_true) + 1e-8)))
+
+def rel_mse_loss(y_pred, y_true):
+    return torch.mean(((y_true - y_pred) / (torch.abs(y_true) + 1e-8)) ** 2)
+
+def log_mse_loss(y_pred, y_true):
+    log_pred = torch.log(torch.abs(y_pred) + 1e-8)
+    log_true = torch.log(torch.abs(y_true) + 1e-8)
+    return torch.nn.functional.mse_loss(log_pred, log_true)
+
+def rel_huber_loss(y_pred, y_true, delta=1.0):
+    relative_error = (y_true - y_pred) / (torch.abs(y_true) + 1e-8)
+    return torch.nn.functional.huber_loss(relative_error, torch.zeros_like(relative_error), delta=delta)
+
+# Select loss function based on arguments
+if args.mape_loss:
+    criterion = mape_loss
+elif args.rel_mse_loss:
+    criterion = rel_mse_loss  
+elif args.log_mse_loss:
+    criterion = log_mse_loss
+elif args.rel_huber_loss:
+    criterion = lambda y_pred, y_true: rel_huber_loss(y_pred, y_true, args.huber_delta)
+else:
+    criterion = torch.nn.MSELoss()
 
 # Build optimizer
 if args.optimizer == "adam":
@@ -1368,8 +1432,12 @@ for epoch_i, (x_train, t_train) in progress_bar:
             args.regualizer_beta_start
         )  # Decimal doesn't work for tensorboard or mixed fp arithmetic
 
-    # mse loss
+    # Training loss (may be alternative loss function)
     loss_train_criterion = criterion(y_train, t_train)
+    
+    # Always compute MSE for early stopping and reporting consistency
+    mse_loss = torch.nn.functional.mse_loss(y_train, t_train)
+    loss_train_criterion_mse = mse_loss
     loss_train_regualizer = (
         args.regualizer * r_w_scale * regualizers["W"]
         + regualizers["g"]
@@ -1393,6 +1461,7 @@ for epoch_i, (x_train, t_train) in progress_bar:
     dag = next((m for m in model.modules() if isinstance(m, DAGLayer)), None)
 
     log_dict["loss/train"] = float(loss_train_criterion.detach().cpu().item())
+    log_dict["loss/train_mse"] = float(loss_train_criterion_mse.detach().cpu().item())
 
     # Log training batch target statistics
     log_dict["targets/train_mean"] = float(t_train.mean().detach().cpu().item())
@@ -1407,6 +1476,12 @@ for epoch_i, (x_train, t_train) in progress_bar:
         log_dict["mean/G_log"] = float(G_tensor[:, :, 1].mean().item())  # Log gate
         o_l1_mean = float(dag._last_train_O.cpu().abs().sum(dim=-1).mean().item())
         log_dict["mean/O"] = o_l1_mean
+        
+        # Log V_sign and V_mag values for debugging
+        if hasattr(dag, '_V_sign_mean'):
+            log_dict["mean/V_sign"] = float(dag._V_sign_mean)
+        if hasattr(dag, '_V_mag_mean'):
+            log_dict["mean/V_mag"] = float(dag._V_mag_mean)
 
         # Log sparsity error (always available with simplified architecture)
         try:
@@ -1477,18 +1552,30 @@ for epoch_i, (x_train, t_train) in progress_bar:
                 g_lin_str = format_value(g_probs[0].item())
                 g_log_str = format_value(g_probs[1].item())
                 g_value_str = f", G_lin: {g_lin_str}, G_log: {g_log_str}"
+        
+        # Add V_sign and V_mag values if available
+        if dag is not None and hasattr(dag, '_V_sign_mean') and hasattr(dag, '_V_mag_mean'):
+            v_sign_str = f"{dag._V_sign_mean:.3f}"
+            v_mag_str = f"{dag._V_mag_mean:.3f}" 
+            g_value_str += f", V_sign: {v_sign_str}, V_mag: {v_mag_str}"
 
-            if hasattr(dag, "O_params"):
+            # Use actual O values used in computation (handles frozen case)
+            if hasattr(dag, "_last_O_values"):
+                o_actual = dag._last_O_values[0].detach().cpu()  # First batch sample
+                o_one = o_actual[0]
+                o_two = o_actual[1]
+                o_value_str = f", O: [{o_one:.3f}, {o_two:.3f}]"
+            elif hasattr(dag, "O_params"):
                 o_raw = dag.O_params.detach().cpu()
                 o_one = o_raw[0]
                 o_two = o_raw[1]
-                o_value_str = f", O: [{o_one}, {o_two}]"
+                o_value_str = f", O: [{o_one:.3f}, {o_two:.3f}]"
 
         print(
             "\ntrain %d: %.10f, inter: %.2e, extra: %.2e%s%s"
             % (
                 epoch_i,
-                loss_train_criterion.detach().cpu().item(),
+                loss_train_criterion_mse.detach().cpu().item(),  # Use MSE for consistency
                 interpolation_error,
                 extrapolation_error.detach().cpu().item(),
                 g_value_str,
